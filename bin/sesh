@@ -1,0 +1,109 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+
+die() {
+  echo "sesh: $*" >&2
+  exit 1
+}
+
+usage() {
+  cat <<'EOF'
+Usage:
+  sesh z <output_dir>
+  sesh eventstats <outputs_root>
+EOF
+}
+
+find_info_file() {
+  local dir="$1"
+  local -a files
+  shopt -s nullglob
+  files=("$dir"/info_*.txt)
+  shopt -u nullglob
+  (( ${#files[@]} )) || die "no info_*.txt found in $dir"
+  printf '%s\n' "${files[0]}"
+}
+
+get_param() {
+  local key="$1"
+  local file="$2"
+  awk -v k="$key" '
+    BEGIN { FS="=" }
+    $0 ~ "^[[:space:]]*"k"[[:space:]]*=" {
+      val=$2
+      gsub(/[[:space:]]/, "", val)
+      print val
+      exit
+    }
+  ' "$file"
+}
+
+require_param() {
+  local key="$1"
+  local file="$2"
+  local val
+  val=$(get_param "$key" "$file")
+  [[ -n "$val" ]] || die "missing $key in $file"
+  printf '%s\n' "$val"
+}
+
+cmd_z() {
+  local outdir="$1"
+  [[ -d "$outdir" ]] || die "not a directory: $outdir"
+  local info
+  info=$(find_info_file "$outdir")
+  local aexp
+  aexp=$(require_param "aexp" "$info")
+  awk -v a="$aexp" 'BEGIN { if (a<=0) exit 1; printf "%.8f\n", (1.0/a)-1.0 }' \
+    || die "invalid aexp in $info"
+}
+
+cmd_eventstats() {
+  local root="$1"
+  [[ -d "$root" ]] || die "not a directory: $root"
+  local -a outputs
+  shopt -s nullglob
+  outputs=("$root"/output_*)
+  shopt -u nullglob
+  (( ${#outputs[@]} )) || die "no output_* directories found in $root"
+
+  local outdir outname
+  local -a files
+  for outdir in "${outputs[@]}"; do
+    [[ -d "$outdir" ]] || continue
+    outname=$(basename -- "$outdir")
+    shopt -s nullglob
+    files=("$outdir"/stars_*.out*)
+    shopt -u nullglob
+    (( ${#files[@]} )) || die "no stars_*.out* found in $outdir"
+    awk -v out="$outname" '
+      $1==0 {c0++}
+      $1==1 {c1++}
+      $1==2 {c2++}
+      $1==3 {c3++}
+      END {
+        printf "%s SF:%d SN:%d B-SF:%d B-SN2:%d\n", out, c0+0, c1+0, c2+0, c3+0
+      }
+    ' "${files[@]}"
+  done
+}
+
+main() {
+  if (( $# < 2 )); then
+    usage >&2
+    exit 1
+  fi
+
+  local cmd="$1"
+  local outdir="$2"
+  case "$cmd" in
+    z) cmd_z "$outdir" ;;
+    eventstats) cmd_eventstats "$outdir" ;;
+    -h|--help) usage ;;
+    *) die "unknown subcommand: $cmd" ;;
+  esac
+}
+
+main "$@"
