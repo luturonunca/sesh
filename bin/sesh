@@ -12,6 +12,7 @@ usage() {
   cat <<'EOF'
 Usage:
   sesh z <output_dir>
+  sesh time <output_dir>
   sesh eventstats <outputs_root>
 EOF
 }
@@ -54,10 +55,35 @@ cmd_z() {
   [[ -d "$outdir" ]] || die "not a directory: $outdir"
   local info
   info=$(find_info_file "$outdir")
-  local aexp
-  aexp=$(require_param "aexp" "$info")
-  awk -v a="$aexp" 'BEGIN { if (a<=0) exit 1; printf "%.8f\n", (1.0/a)-1.0 }' \
-    || die "invalid aexp in $info"
+  awk '
+    /aexp/ { a=$3 }
+    END {
+      if (a<=0) exit 1
+      printf "%.8f\n", (1.0/a)-1.0
+    }
+  ' "$info" || die "invalid aexp in $info"
+}
+
+cmd_time() {
+  local outdir="$1"
+  [[ -d "$outdir" ]] || die "not a directory: $outdir"
+  local info
+  info=$(find_info_file "$outdir")
+  awk '
+    /aexp/ { a=$3 }
+    /H0/ { H0=$3 }
+    /omega_m/ { Om=$3 }
+    /omega_l/ { Ol=$3 }
+    END {
+      if (a<=0 || H0<=0 || Om<=0 || Ol<=0) exit 1
+      z=1/a-1
+      H0s=H0*1000/(3.085677581e22)
+      tH=1/H0s/3.15576e16/1e9
+      t=(2/(3*sqrt(Ol)))*asinh(sqrt(Ol/Om)*a^(3/2))*tH
+      t0=(2/(3*sqrt(Ol)))*asinh(sqrt(Ol/Om))*tH
+      printf "z=%.3f  age=%.3f Gyr  lookback=%.3f Gyr\n", z, t, t0-t
+    }
+  ' "$info" || die "cosmology calculation failed for $info"
 }
 
 cmd_eventstats() {
@@ -100,6 +126,7 @@ main() {
   local outdir="$2"
   case "$cmd" in
     z) cmd_z "$outdir" ;;
+    time) cmd_time "$outdir" ;;
     eventstats) cmd_eventstats "$outdir" ;;
     -h|--help) usage ;;
     *) die "unknown subcommand: $cmd" ;;
