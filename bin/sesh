@@ -70,6 +70,7 @@ cmd_time() {
   local info
   info=$(find_info_file "$outdir")
   awk '
+    function asinh(x) { return log(x + sqrt((x * x) + 1.0)) }
     /aexp/ { a=$3 }
     /H0/ { H0=$3 }
     /omega_m/ { Om=$3 }
