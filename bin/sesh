@@ -14,6 +14,8 @@ Usage:
   sesh z <output_dir>
   sesh time <output_dir>
   sesh eventstats <outputs_root>
+  sesh z all
+  sesh time all
 EOF
 }
 
@@ -64,6 +66,22 @@ cmd_z() {
   ' "$info" || die "invalid aexp in $info"
 }
 
+cmd_z_all() {
+  local -a outputs
+  shopt -s nullglob
+  outputs=(./output_*)
+  shopt -u nullglob
+  (( ${#outputs[@]} )) || die "no output_* directories found in ."
+  local outdir outname
+  for outdir in "${outputs[@]}"; do
+    [[ -d "$outdir" ]] || continue
+    outname=$(basename -- "$outdir")
+    local z
+    z=$(cmd_z "$outdir") || die "failed z for $outdir"
+    printf "%s z=%s\n" "$outname" "$z"
+  done
+}
+
 cmd_time() {
   local outdir="$1"
   [[ -d "$outdir" ]] || die "not a directory: $outdir"
@@ -79,12 +97,28 @@ cmd_time() {
       if (a<=0 || H0<=0 || Om<=0 || Ol<=0) exit 1
       z=1/a-1
       H0s=H0*1000/(3.085677581e22)
-      tH=1/H0s/3.15576e16/1e9
+      tH=1/H0s/3.15576e16
       t=(2/(3*sqrt(Ol)))*asinh(sqrt(Ol/Om)*a^(3/2))*tH
       t0=(2/(3*sqrt(Ol)))*asinh(sqrt(Ol/Om))*tH
-      printf "z=%.3f  age=%.3f Gyr  lookback=%.3f Gyr\n", z, t, t0-t
+      printf "z=%.3f  t=%.3f Gyr  lookback=%.3f Gyr\n", z, t, t0-t
     }
   ' "$info" || die "cosmology calculation failed for $info"
+}
+
+cmd_time_all() {
+  local -a outputs
+  shopt -s nullglob
+  outputs=(./output_*)
+  shopt -u nullglob
+  (( ${#outputs[@]} )) || die "no output_* directories found in ."
+  local outdir outname
+  for outdir in "${outputs[@]}"; do
+    [[ -d "$outdir" ]] || continue
+    outname=$(basename -- "$outdir")
+    local line
+    line=$(cmd_time "$outdir") || die "failed time for $outdir"
+    printf "%s %s\n" "$outname" "$line"
+  done
 }
 
 cmd_eventstats() {
@@ -126,9 +160,15 @@ main() {
   local cmd="$1"
   local outdir="$2"
   case "$cmd" in
-    z) cmd_z "$outdir" ;;
-    time) cmd_time "$outdir" ;;
-    eventstats) cmd_eventstats "$outdir" ;;
+    z)
+      if [[ "$outdir" == "all" ]]; then cmd_z_all; else cmd_z "$outdir"; fi
+      ;;
+    time)
+      if [[ "$outdir" == "all" ]]; then cmd_time_all; else cmd_time "$outdir"; fi
+      ;;
+    eventstats)
+      cmd_eventstats "$outdir"
+      ;;
     -h|--help) usage ;;
     *) die "unknown subcommand: $cmd" ;;
   esac

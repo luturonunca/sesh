@@ -16,6 +16,8 @@ Run from the repo root:
 bin/sesh z /path/to/output_00042
 bin/sesh time /path/to/output_00042
 bin/sesh eventstats /path/to/outputs_root
+bin/sesh z all
+bin/sesh time all
 ```
 
 Optional PATH setup:
@@ -27,7 +29,7 @@ export PATH="$PWD/bin:$PATH"
 ## Subcommands
 
 - `sesh z <output_dir>`: print redshift from `info_XXXXX.txt`
-- `sesh time <output_dir>`: print redshift, age, and lookback time from `info_XXXXX.txt`
+- `sesh time <output_dir>`: print redshift, time, and lookback time from `info_XXXXX.txt`
 - `sesh eventstats <outputs_root>`: per `output_XXXXX`, count event ids in `stars_*.out*`
 
 Example output:
