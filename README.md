@@ -4,9 +4,23 @@ Lightweight Bash CLI toolkit for inspecting RAMSES simulation outputs.
 
 ## Usage
 
+Make the executable available:
+
+```bash
+chmod +x bin/sesh
+```
+
+Run from the repo root:
+
 ```bash
 bin/sesh z /path/to/output_00042
 bin/sesh eventstats /path/to/outputs_root
+```
+
+Optional PATH setup:
+
+```bash
+export PATH="$PWD/bin:$PATH"
 ```
 
 ## Subcommands
