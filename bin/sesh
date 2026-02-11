@@ -154,12 +154,12 @@ cmd_eventstats() {
       $1==1 {c1++}
       $1==2 {c2++}
       $1==3 {c3++}
-      function colorize(n) {
-        if (n>0) return sprintf("\033[36m%d\033[0m", n)
-        return sprintf("%d", n)
+      function colorize(label, n) {
+        if (n>0) return sprintf("\033[36m%s:%d\033[0m", label, n)
+        return sprintf("%s:%d", label, n)
       }
       END {
-        printf "%s SF:%s SN:%s B-SF:%s B-SN2:%s\n", out, colorize(c0+0), colorize(c1+0), colorize(c2+0), colorize(c3+0)
+        printf "%s %s %s %s %s\n", out, colorize("SF", c0+0), colorize("SN", c1+0), colorize("B-SF", c2+0), colorize("B-SN2", c3+0)
       }
     ' "${files[@]}"
   done
