@@ -13,7 +13,7 @@ usage() {
 Usage:
   sesh z <output_dir>
   sesh time <output_dir>
-  sesh eventstats <outputs_root>
+  sesh eventstats <outputs_root> [--from N]
   sesh z all
   sesh time all
 EOF
@@ -123,7 +123,11 @@ cmd_time_all() {
 
 cmd_eventstats() {
   local root="$1"
+  local start="${2:-}"
   [[ -d "$root" ]] || die "not a directory: $root"
+  if [[ -n "$start" ]]; then
+    [[ "$start" =~ ^[0-9]+$ ]] || die "start must be an integer: $start"
+  fi
   local -a outputs
   shopt -s nullglob
   outputs=("$root"/output_*)
@@ -135,6 +139,12 @@ cmd_eventstats() {
   for outdir in "${outputs[@]}"; do
     [[ -d "$outdir" ]] || continue
     outname=$(basename -- "$outdir")
+    if [[ -n "$start" ]]; then
+      local num="${outname#output_}"
+      if (( 10#$num < 10#$start )); then
+        continue
+      fi
+    fi
     shopt -s nullglob
     files=("$outdir"/stars_*.out*)
     shopt -u nullglob
@@ -167,7 +177,13 @@ main() {
       if [[ "$outdir" == "all" ]]; then cmd_time_all; else cmd_time "$outdir"; fi
       ;;
     eventstats)
-      cmd_eventstats "$outdir"
+      local start=""
+      if (( $# == 4 )) && [[ "$3" == "--from" ]]; then
+        start="$4"
+      elif (( $# > 2 )); then
+        die "usage: sesh eventstats <outputs_root> [--from N]"
+      fi
+      cmd_eventstats "$outdir" "$start"
       ;;
     -h|--help) usage ;;
     *) die "unknown subcommand: $cmd" ;;
