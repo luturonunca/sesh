@@ -14,6 +14,7 @@ Usage:
   sesh z <output_dir>
   sesh time <output_dir>
   sesh eventstats <outputs_root> [--from N]
+  sesh simstatus [--path DIR]
   sesh z all
   sesh time all
 EOF
@@ -174,6 +175,73 @@ cmd_eventstats() {
   done
 }
 
+cmd_simstatus() {
+  local root="${1:-.}"
+  [[ -d "$root" ]] || die "not a directory: $root"
+
+  local RED="" YELLOW="" BLUE="" CYAN="" GREEN="" BOLD="" RESET=""
+  if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
+    RED=$'\e[31m'
+    YELLOW=$'\e[33m'
+    BLUE=$'\e[34m'
+    CYAN=$'\e[36m'
+    GREEN=$'\e[32m'
+    BOLD=$'\e[1m'
+    RESET=$'\e[0m'
+  fi
+
+  local HOUR=$((60*60))
+  local DAY=$((24*HOUR))
+  local WEEK=$((7*DAY))
+  local MONTH=$((30*DAY))
+
+  printf "%-13s %-63s %-12s %s\n" "snapshot" "simulation" "z_latest" "last_write"
+  printf "%-13s %-63s %-12s %s\n" "-----------" "---------------------------------------------------------------" "----------" "----------------"
+
+  local simdir simname
+  local -a snaps
+  for simdir in "$root"/*/; do
+    [[ -d "$simdir" ]] || continue
+    simname=$(basename -- "$simdir")
+
+    shopt -s nullglob
+    snaps=("$simdir"/output_?????)
+    shopt -u nullglob
+    (( ${#snaps[@]} )) || continue
+    local latest
+    latest=$(printf '%s\n' "${snaps[@]}" | sort -V | tail -n 1)
+
+    local infofile
+    infofile=$(ls -1t "$latest"/info_* 2>/dev/null | head -n 1)
+    [[ -n "$infofile" ]] || continue
+
+    local zfmt
+    zfmt=$(awk '
+      /aexp/ { a=$3 }
+      END {
+        if (a<=0) exit 1
+        printf "%.3f", (1.0/a)-1.0
+      }
+    ' "$infofile") || continue
+
+    local mtime_epoch now_epoch age stamp
+    mtime_epoch=$(stat -c %Y "$infofile")
+    now_epoch=$(date +%s)
+    age=$(( now_epoch - mtime_epoch ))
+    stamp=$(date -d @"$mtime_epoch" '+%Y-%m-%d %H:%M')
+
+    local color tag
+    if (( age > MONTH )); then color=$RED; tag=">1mo"
+    elif (( age > WEEK )); then color=$YELLOW; tag=">1w"
+    elif (( age > DAY )); then color=$BLUE; tag=">1d"
+    elif (( age > HOUR )); then color=$CYAN; tag=">1h"
+    else color=$GREEN; tag="~1h"
+    fi
+
+    printf "%-13s %-63s %-12s %s\n" "$(basename -- "$latest")" "$simname" "$zfmt" "${color}${stamp} (${tag})${RESET}"
+  done
+}
+
 main() {
   if (( $# < 2 )); then
     usage >&2
@@ -197,6 +265,15 @@ main() {
         die "usage: sesh eventstats <outputs_root> [--from N]"
       fi
       cmd_eventstats "$outdir" "$start"
+      ;;
+    simstatus)
+      local root="."
+      if (( $# == 4 )) && [[ "$3" == "--path" ]]; then
+        root="$4"
+      elif (( $# > 2 )); then
+        die "usage: sesh simstatus [--path DIR]"
+      fi
+      cmd_simstatus "$root"
       ;;
     -h|--help) usage ;;
     *) die "unknown subcommand: $cmd" ;;
