@@ -243,13 +243,13 @@ cmd_simstatus() {
 }
 
 main() {
-  if (( $# < 2 )); then
+  if (( $# < 1 )); then
     usage >&2
     exit 1
   fi
 
   local cmd="$1"
-  local outdir="$2"
+  local outdir="${2:-}"
   case "$cmd" in
     z)
       if [[ "$outdir" == "all" ]]; then cmd_z_all; else cmd_z "$outdir"; fi
