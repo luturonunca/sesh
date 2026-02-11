@@ -160,8 +160,15 @@ cmd_eventstats() {
         if (n>0) return sprintf("\033[36m%s:%d\033[0m", label, n)
         return sprintf("%s:%d", label, n)
       }
+      function fmtz(val, absval, dec) {
+        absval = (val < 0) ? -val : val
+        if (absval <= 0) return "0"
+        dec = 2 - int(log(absval) / log(10))
+        if (dec < 0) dec = 0
+        return sprintf("%.*f", dec, val)
+      }
       END {
-        printf "%s %s %s %s %s        z=%s\n", out, colorize("SF", c0+0), colorize("SN", c1+0), colorize("B-SF", c2+0), colorize("B-SN2", c3+0), z
+        printf "%s %s %s %s %s        z=%s\n", out, colorize("SF", c0+0), colorize("SN", c1+0), colorize("B-SF", c2+0), colorize("B-SN2", c3+0), fmtz(z+0)
       }
     ' "${files[@]}"
   done
