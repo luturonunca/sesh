@@ -149,7 +149,9 @@ cmd_eventstats() {
     files=("$outdir"/stars_*.out*)
     shopt -u nullglob
     (( ${#files[@]} )) || die "no stars_*.out* found in $outdir"
-    awk -v out="$outname" '
+    local z
+    z=$(cmd_z "$outdir") || die "failed z for $outdir"
+    awk -v out="$outname" -v z="$z" '
       $1==0 {c0++}
       $1==1 {c1++}
       $1==2 {c2++}
@@ -159,7 +161,7 @@ cmd_eventstats() {
         return sprintf("%s:%d", label, n)
       }
       END {
-        printf "%s %s %s %s %s\n", out, colorize("SF", c0+0), colorize("SN", c1+0), colorize("B-SF", c2+0), colorize("B-SN2", c3+0)
+        printf "%s %s %s %s %s        z=%s\n", out, colorize("SF", c0+0), colorize("SN", c1+0), colorize("B-SF", c2+0), colorize("B-SN2", c3+0), z
       }
     ' "${files[@]}"
   done
