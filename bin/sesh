@@ -15,6 +15,7 @@ Usage:
   sesh time <output_dir>
   sesh eventstats <outputs_root> [--from N]
   sesh simstatus [--path DIR]
+  sesh sinkmass <sim_dir> <id>
   sesh z all
   sesh time all
 EOF
@@ -242,6 +243,45 @@ cmd_simstatus() {
   done
 }
 
+cmd_sinkmass() {
+  local simdir="$1"
+  local bh_id="$2"
+  [[ -d "$simdir" ]] || die "not a directory: $simdir"
+  [[ -n "$bh_id" ]] || die "usage: sesh sinkmass <sim_dir> <id>"
+
+  local -a snaps
+  shopt -s nullglob
+  snaps=("$simdir"/output_?????)
+  shopt -u nullglob
+  (( ${#snaps[@]} )) || die "no output_* found in $simdir"
+  local latest
+  latest=$(printf '%s\n' "${snaps[@]}" | sort -V | tail -n 1)
+  local nchar
+  nchar=$(basename -- "$latest" | sed 's/output_//')
+
+  local infofile="$latest/info_${nchar}.txt"
+  [[ -f "$infofile" ]] || die "no info file: $infofile"
+  local unit_l unit_d
+  unit_l=$(get_param unit_l "$infofile")
+  unit_d=$(get_param unit_d "$infofile")
+  [[ -n "$unit_l" && -n "$unit_d" ]] || die "missing unit_l/unit_d in $infofile"
+
+  local csvfile="$latest/sink_${nchar}.csv"
+  [[ -f "$csvfile" ]] || die "no sink file: $csvfile"
+
+  awk -F',' -v id="$bh_id" -v ul="$unit_l" -v ud="$unit_d" -v snap="$(basename -- "$latest")" '
+    /^#/ { next }
+    $1+0 == id+0 {
+      scale_m = ud * ul^3 / 1.9885e33
+      msink = $2  + 0
+      msmbh = $21 + 0
+      printf "BH %d  msink=%.4e Msol  msmbh=%.4e Msol  (%s)\n", id, msink*scale_m, msmbh*scale_m, snap
+      found=1; exit
+    }
+    END { if (!found) printf "BH id %d not found in %s\n", id, FILENAME }
+  ' "$csvfile"
+}
+
 main() {
   if (( $# < 1 )); then
     usage >&2
@@ -274,6 +314,10 @@ main() {
         die "usage: sesh simstatus [--path DIR]"
       fi
       cmd_simstatus "$root"
+      ;;
+    sinkmass)
+      [[ $# -ge 3 ]] || die "usage: sesh sinkmass <sim_dir> <id>"
+      cmd_sinkmass "$2" "$3"
       ;;
     -h|--help) usage ;;
     *) die "unknown subcommand: $cmd" ;;
