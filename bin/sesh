@@ -11,13 +11,15 @@ die() {
 usage() {
   cat <<'EOF'
 Usage:
-  sesh z <output_dir>
-  sesh time <output_dir>
-  sesh eventstats <outputs_root> [--from N]
-  sesh simstatus [--path DIR]
-  sesh sinkmass <sim_dir> <id>
-  sesh z all
-  sesh time all
+  sesh <subcommand> [args]
+
+Subcommands:
+  z <output_dir>                  Redshift of a single snapshot (or 'all' for every output_* in cwd)
+  time <output_dir>               Redshift, age, and lookback time (or 'all')
+  eventstats <root> [--from N]    Count SF/SN/B-SF/B-SN2 events per snapshot from stars_*.out*
+  simstatus [--path DIR]          One-line status per simulation: latest snapshot, z, last write time
+  sinkmass <sim_dir> <id>         msink and msmbh in solar masses for a sink ID (latest snapshot)
+
 EOF
 }
 
