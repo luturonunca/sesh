@@ -19,6 +19,11 @@ Subcommands:
   eventstats <root> [--from N]    Count SF/SN/B-SF/B-SN2 events per snapshot from stars_*.out*
   simstatus [--path DIR]          One-line status per simulation: latest snapshot, z, last write time
   sinkmass <sim_dir> <id> [--snap N]  msink and msmbh in solar masses for a sink ID (latest or snapshot N)
+  report <sim_dir> [options]      Write per-snapshot CSV table (numpy-loadable)
+    --fields f1,f2,...            Fields: z, t, lookback, nstars, sinkmass:N, smbhmass:N
+    --preset z_stars|cosmo|z_bh:N Named field combination
+    --out <file>                  Output file (default: sesh_report.csv)
+    --from N                      Skip outputs before output_N
 
 EOF
 }
@@ -245,6 +250,157 @@ cmd_simstatus() {
   done
 }
 
+cmd_report() {
+  local simdir="$1"
+  shift
+  [[ -d "$simdir" ]] || die "not a directory: $simdir"
+
+  local fields="" outfile="sesh_report.csv" start="" preset=""
+  while (( $# )); do
+    case "$1" in
+      --fields) fields="$2"; shift 2 ;;
+      --preset) preset="$2"; shift 2 ;;
+      --out)    outfile="$2"; shift 2 ;;
+      --from)   start="$2"; shift 2 ;;
+      *) die "report: unknown option: $1" ;;
+    esac
+  done
+
+  if [[ -n "$preset" ]]; then
+    [[ -z "$fields" ]] || die "report: --preset and --fields are mutually exclusive"
+    case "$preset" in
+      z_stars) fields="z,nstars" ;;
+      cosmo)   fields="z,t,lookback" ;;
+      z_bh:*)
+        local bh_preset="${preset#z_bh:}"
+        [[ "$bh_preset" =~ ^[0-9]+$ ]] || die "report: z_bh preset requires numeric id"
+        fields="z,sinkmass:${bh_preset},smbhmass:${bh_preset}"
+        ;;
+      *) die "report: unknown preset '$preset' (known: z_stars, cosmo, z_bh:<id>)" ;;
+    esac
+  fi
+
+  [[ -n "$fields" ]] || die "report: specify --fields or --preset"
+
+  local -a field_arr
+  IFS=',' read -ra field_arr <<< "$fields"
+
+  local header="snapshot"
+  local f
+  for f in "${field_arr[@]}"; do
+    case "$f" in
+      z)          header+=",z" ;;
+      t)          header+=",t_Gyr" ;;
+      lookback)   header+=",lookback_Gyr" ;;
+      nstars)     header+=",nstars" ;;
+      sinkmass:*) header+=",msink_${f#sinkmass:}_Msol" ;;
+      smbhmass:*) header+=",msmbh_${f#smbhmass:}_Msol" ;;
+      *) die "report: unknown field '$f'" ;;
+    esac
+  done
+
+  local -a snaps
+  shopt -s nullglob
+  snaps=("$simdir"/output_?????)
+  shopt -u nullglob
+  (( ${#snaps[@]} )) || die "no output_* found in $simdir"
+
+  {
+    printf "# %s\n" "$header"
+    local snap snapname num infofile val row bh_id nchar csvfile unit_l unit_d
+    local -a sfiles ifiles
+    for snap in $(printf '%s\n' "${snaps[@]}" | sort -V); do
+      [[ -d "$snap" ]] || continue
+      snapname=$(basename -- "$snap")
+      if [[ -n "$start" ]]; then
+        num="${snapname#output_}"
+        (( 10#$num < 10#$start )) && continue
+      fi
+      shopt -s nullglob
+      ifiles=("$snap"/info_*.txt)
+      shopt -u nullglob
+      (( ${#ifiles[@]} )) || continue
+      infofile="${ifiles[0]}"
+
+      row="$snapname"
+      for f in "${field_arr[@]}"; do
+        case "$f" in
+          z)
+            val=$(awk '/aexp/ { a=$3 } END { if (a>0) printf "%.6f", (1.0/a)-1.0; else exit 1 }' "$infofile") || val="NA"
+            ;;
+          t)
+            val=$(awk '
+              function asinh(x) { return log(x + sqrt(x*x + 1.0)) }
+              /aexp/ { a=$3 } /H0/ { H0=$3 } /omega_m/ { Om=$3 } /omega_l/ { Ol=$3 }
+              END {
+                if (a<=0||H0<=0||Om<=0||Ol<=0) exit 1
+                H0s=H0*1000/(3.085677581e22); tH=1/H0s/3.15576e16
+                printf "%.4f", (2/(3*sqrt(Ol)))*asinh(sqrt(Ol/Om)*a^(3/2))*tH
+              }' "$infofile") || val="NA"
+            ;;
+          lookback)
+            val=$(awk '
+              function asinh(x) { return log(x + sqrt(x*x + 1.0)) }
+              /aexp/ { a=$3 } /H0/ { H0=$3 } /omega_m/ { Om=$3 } /omega_l/ { Ol=$3 }
+              END {
+                if (a<=0||H0<=0||Om<=0||Ol<=0) exit 1
+                H0s=H0*1000/(3.085677581e22); tH=1/H0s/3.15576e16
+                t=(2/(3*sqrt(Ol)))*asinh(sqrt(Ol/Om)*a^(3/2))*tH
+                t0=(2/(3*sqrt(Ol)))*asinh(sqrt(Ol/Om))*tH
+                printf "%.4f", t0-t
+              }' "$infofile") || val="NA"
+            ;;
+          nstars)
+            shopt -s nullglob
+            sfiles=("$snap"/stars_*.out*)
+            shopt -u nullglob
+            if (( ${#sfiles[@]} )); then
+              val=$(awk 'END { print NR }' "${sfiles[@]}")
+            else
+              val="NA"
+            fi
+            ;;
+          sinkmass:*)
+            bh_id="${f#sinkmass:}"
+            nchar="${snapname#output_}"
+            csvfile="$snap/sink_${nchar}.csv"
+            unit_l=$(get_param unit_l "$infofile")
+            unit_d=$(get_param unit_d "$infofile")
+            if [[ -f "$csvfile" && -n "$unit_l" && -n "$unit_d" ]]; then
+              val=$(awk -F',' -v id="$bh_id" -v ul="$unit_l" -v ud="$unit_d" '
+                /^#/ { next }
+                $1+0==id+0 { printf "%.4e", ($2+0)*ud*ul^3/1.9885e33; found=1; exit }
+                END { if (!found) print "NA" }
+              ' "$csvfile")
+            else
+              val="NA"
+            fi
+            ;;
+          smbhmass:*)
+            bh_id="${f#smbhmass:}"
+            nchar="${snapname#output_}"
+            csvfile="$snap/sink_${nchar}.csv"
+            unit_l=$(get_param unit_l "$infofile")
+            unit_d=$(get_param unit_d "$infofile")
+            if [[ -f "$csvfile" && -n "$unit_l" && -n "$unit_d" ]]; then
+              val=$(awk -F',' -v id="$bh_id" -v ul="$unit_l" -v ud="$unit_d" '
+                /^#/ { next }
+                $1+0==id+0 { printf "%.4e", ($21+0)*ud*ul^3/1.9885e33; found=1; exit }
+                END { if (!found) print "NA" }
+              ' "$csvfile")
+            else
+              val="NA"
+            fi
+            ;;
+        esac
+        row+=",$val"
+      done
+      printf "%s\n" "$row"
+    done
+  } > "$outfile"
+  echo "sesh: report written to $outfile"
+}
+
 cmd_sinkmass() {
   local simdir="$1"
   local bh_id="$2"
@@ -332,6 +488,10 @@ main() {
         die "usage: sesh sinkmass <sim_dir> <id> [--snap N]"
       fi
       cmd_sinkmass "$2" "$3" "$snap_id"
+      ;;
+    report)
+      [[ $# -ge 2 ]] || die "usage: sesh report <sim_dir> [--fields f1,f2,...|--preset name] [--out file] [--from N]"
+      cmd_report "$2" "${@:3}"
       ;;
     -h|--help) usage ;;
     *) die "unknown subcommand: $cmd" ;;
