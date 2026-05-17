@@ -16,7 +16,7 @@ Usage:
 Subcommands:
   z <output_dir>                  Redshift of a single snapshot (or 'all' for every output_* in cwd)
   time <output_dir>               Redshift, age, and lookback time (or 'all')
-  eventstats <root> [--from N]    Count SF/SN/B-SF/B-SN2 events per snapshot from stars_*.out*
+  eventstats <root> [--from N]    Count SF/SN/B-SF/B-SN2/B-MRG events per snapshot from stars_*.out*
   simstatus [--path DIR]          One-line status per simulation: latest snapshot, z, last write time
   sinkmass <sim_dir> <id> [--snap N]  msink and msmbh in solar masses for a sink ID (latest or snapshot N)
   report <sim_dir> [options]      Write per-snapshot CSV table (numpy-loadable)
@@ -165,6 +165,7 @@ cmd_eventstats() {
       $1==1 {c1++}
       $1==2 {c2++}
       $1==3 {c3++}
+      $1==4 {c4++}
       function colorize(label, n) {
         if (n>0) return sprintf("\033[36m%s:%d\033[0m", label, n)
         return sprintf("%s:%d", label, n)
@@ -177,7 +178,7 @@ cmd_eventstats() {
         return sprintf("%.*f", dec, val)
       }
       END {
-        printf "%s %s %s %s %s        z=%s\n", out, colorize("SF", c0+0), colorize("SN", c1+0), colorize("B-SF", c2+0), colorize("B-SN2", c3+0), fmtz(z+0)
+        printf "%s %s %s %s %s %s        z=%s\n", out, colorize("SF", c0+0), colorize("SN", c1+0), colorize("B-SF", c2+0), colorize("B-SN2", c3+0), colorize("B-MRG", c4+0), fmtz(z+0)
       }
     ' "${files[@]}"
   done
