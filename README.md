@@ -26,6 +26,7 @@ sesh time <output_dir>
 sesh time all
 sesh eventstats <outputs_root> [--from N]
 sesh simstatus [--path DIR]
+sesh walltime <sim_dir> [--to-z Z]
 sesh sinkmass <sim_dir> <id>
 ```
 
@@ -133,6 +134,34 @@ sesh simstatus --path /path/to/simulations
 | Red    | >1mo  | Written more than 1 month ago  |
 
 Colors are suppressed when output is not a TTY or when `NO_COLOR` is set.
+
+---
+
+### `sesh walltime <sim_dir> [--to-z Z]`
+
+Print cumulative wall time and CPU cost per output snapshot.
+
+Reads the `TOTAL` wall time from each `timer_XXXXX.txt` and `ncpu` from the corresponding `info_XXXXX.txt`. Outputs are sorted by snapshot number. Use `--to-z Z` to stop at the first output with redshift below `Z`.
+
+```bash
+sesh walltime /path/to/sim
+sesh walltime /path/to/sim --to-z 4.0
+
+# output           z     step      cumul   ncpu    CPU-Kh
+# -------------  -------  -------  --------  -----  ---------
+# output_00001   9.0000   0.23h    0.23h      256       0.02
+# output_00002   7.4320   0.28h    0.51h      256       0.03
+# ...
+# output_00042   3.1416   0.41h   12.34h      256       0.81
+```
+
+| Column     | Description                                             |
+|------------|---------------------------------------------------------|
+| `z`        | Redshift at that output                                 |
+| `step`     | Wall time for this output step (hours)                  |
+| `cumul`    | Cumulative wall time from start (hours)                 |
+| `ncpu`     | Number of MPI ranks                                     |
+| `CPU-Kh`   | Cumulative CPU cost in kilo CPU-hours (2 decimals)      |
 
 ---
 
