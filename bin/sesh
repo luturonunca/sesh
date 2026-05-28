@@ -464,8 +464,8 @@ cmd_walltime() {
   printf "%-13s  %7s  %7s  %8s  %5s  %9s\n" \
     "-------------" "-------" "-------" "--------" "-----" "---------"
 
-  local cumul_s=0
-  local snap snapname nchar tfile infofile z ncpu step_s
+  local cumul_s=0 prev_total=0
+  local snap snapname nchar tfile infofile z ncpu total_s step_s
   for snap in $(printf '%s\n' "${snaps[@]}" | sort -V); do
     [[ -d "$snap" ]] || continue
     snapname=$(basename -- "$snap")
@@ -484,10 +484,15 @@ cmd_walltime() {
     ncpu=$(get_param ncpu "$infofile")
     [[ -n "$ncpu" ]] || continue
 
-    step_s=$(awk '/TOTAL[[:space:]]*$/ { v=substr($0,1,12)+0; if(v>0){ print v; exit } }' "$tfile")
-    [[ -n "$step_s" ]] || continue
+    total_s=$(awk '/TOTAL[[:space:]]*$/ { v=substr($0,1,12)+0; if(v>0){ print v; exit } }' "$tfile")
+    [[ -n "$total_s" ]] || continue
+
+    # step = diff from prev within same run; restart detected when total decreases
+    step_s=$(awk -v cur="$total_s" -v prev="$prev_total" \
+      'BEGIN { printf "%.6f", (cur+0 > prev+0) ? cur-prev : cur }')
 
     cumul_s=$(awk -v c="$cumul_s" -v s="$step_s" 'BEGIN { printf "%.6f", c+s }')
+    prev_total=$total_s
 
     awk -v snap="$snapname" -v z="$z" -v step="$step_s" \
         -v cumul="$cumul_s" -v ncpu="$ncpu" '
