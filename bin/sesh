@@ -512,7 +512,7 @@ cmd_walltime() {
         step_h  = step  / 3600.0
         cumul_h = cumul / 3600.0
         cpu_kh  = cpu_kh_s / 3600.0 / 1000.0
-        printf "%s,%.6f,%.6f,%.6f,%d,%.6f\n",
+        printf "%s,%.4f,%.4f,%.4f,%d,%.4f\n",
           snap, z+0, step_h, cumul_h, ncpu+0, cpu_kh
       }
     '
