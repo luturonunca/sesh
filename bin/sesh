@@ -464,15 +464,16 @@ cmd_walltime() {
   printf "%-13s  %7s  %7s  %8s  %5s  %9s\n" \
     "-------------" "-------" "-------" "--------" "-----" "---------"
 
-  local cumul_s=0 prev_total=0
-  local snap snapname nchar tfile infofile z ncpu total_s step_s
+  local cumul_s=0 prev_total=0 prev_nrestart="" cpu_kh_s=0 prev_ncpu=0
+  local snap snapname nchar tfile infofile nmlfile z ncpu total_s step_s nrestart new_job
   for snap in $(printf '%s\n' "${snaps[@]}" | sort -V); do
     [[ -d "$snap" ]] || continue
     snapname=$(basename -- "$snap")
     nchar="${snapname#output_}"
     tfile="$snap/timer_${nchar}.txt"
     infofile="$snap/info_${nchar}.txt"
-    [[ -f "$tfile" && -f "$infofile" ]] || continue
+    nmlfile="$snap/namelist.txt"
+    [[ -f "$tfile" && -f "$infofile" && -f "$nmlfile" ]] || continue
 
     z=$(awk '/aexp/ { a=$3 } END { if (a>0) printf "%.4f", (1.0/a)-1.0; else exit 1 }' \
         "$infofile") || continue
@@ -484,22 +485,36 @@ cmd_walltime() {
     ncpu=$(get_param ncpu "$infofile")
     [[ -n "$ncpu" ]] || continue
 
+    nrestart=$(get_param nrestart "$nmlfile")
+    nrestart="${nrestart:-0}"
+
     total_s=$(awk '/TOTAL[[:space:]]*$/ { v=substr($0,1,12)+0; if(v>0){ print v; exit } }' "$tfile")
     [[ -n "$total_s" ]] || continue
 
-    # step = diff from prev within same run; restart detected when total decreases
-    step_s=$(awk -v cur="$total_s" -v prev="$prev_total" \
-      'BEGIN { printf "%.6f", (cur+0 > prev+0) ? cur-prev : cur }')
+    # Detect restart: nrestart changed since the previous output means a new job started.
+    # Use total_s directly as the step (timer reset at job start); otherwise diff from prev.
+    if [[ "$nrestart" != "$prev_nrestart" && -n "$prev_nrestart" ]]; then
+      new_job=1
+    else
+      new_job=0
+    fi
+
+    step_s=$(awk -v cur="$total_s" -v prev="$prev_total" -v newjob="$new_job" \
+      'BEGIN { printf "%.6f", (newjob || cur+0 <= prev+0) ? cur : cur-prev }')
 
     cumul_s=$(awk -v c="$cumul_s" -v s="$step_s" 'BEGIN { printf "%.6f", c+s }')
+    cpu_kh_s=$(awk -v c="$cpu_kh_s" -v s="$step_s" -v n="$ncpu" \
+      'BEGIN { printf "%.6f", c + s*n }')
     prev_total=$total_s
+    prev_nrestart=$nrestart
+    prev_ncpu=$ncpu
 
     awk -v snap="$snapname" -v z="$z" -v step="$step_s" \
-        -v cumul="$cumul_s" -v ncpu="$ncpu" '
+        -v cumul="$cumul_s" -v ncpu="$ncpu" -v cpu_kh_s="$cpu_kh_s" '
       BEGIN {
         step_h  = step  / 3600.0
         cumul_h = cumul / 3600.0
-        cpu_kh  = (cumul * ncpu) / 3600.0 / 1000.0
+        cpu_kh  = cpu_kh_s / 3600.0 / 1000.0
         printf "%-13s  %7.4f  %5.2fh  %6.2fh  %5d  %9.2f\n",
           snap, z+0, step_h, cumul_h, ncpu+0, cpu_kh
       }
