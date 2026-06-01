@@ -459,10 +459,10 @@ cmd_walltime() {
   shopt -u nullglob
   (( ${#snaps[@]} )) || die "no output_* found in $simdir"
 
-  printf "# %-13s  ,  %7s  ,  %7s  ,  %8s  ,  %5s  ,  %9s\n" \
+  printf "# %5s  ,  %7s  ,  %7s  ,  %8s  ,  %5s  ,  %9s\n" \
     "output" "z" "step_h" "cumul_h" "ncpu" "cpu_kh"
-  printf "# %-13s  ,  %7s  ,  %7s  ,  %8s  ,  %5s  ,  %9s\n" \
-    "-------------" "-------" "-------" "--------" "-----" "---------"
+  printf "# %5s  ,  %7s  ,  %7s  ,  %8s  ,  %5s  ,  %9s\n" \
+    "-----" "-------" "-------" "--------" "-----" "---------"
 
   local cumul_s=0 prev_total=0 prev_nrestart="" cpu_kh_s=0 prev_ncpu=0
   local snap snapname nchar tfile infofile nmlfile z ncpu total_s step_s nrestart new_job
@@ -509,14 +509,14 @@ cmd_walltime() {
     prev_nrestart=$nrestart
     prev_ncpu=$ncpu
 
-    awk -v snap="$snapname" -v z="$z" -v step="$step_s" \
+    awk -v nchar="$nchar" -v z="$z" -v step="$step_s" \
         -v cumul="$cumul_s" -v ncpu="$ncpu" -v cpu_kh_s="$cpu_kh_s" '
       BEGIN {
         step_h  = step  / 3600.0
         cumul_h = cumul / 3600.0
         cpu_kh  = cpu_kh_s / 3600.0 / 1000.0
-        printf "%-13s  ,  %7.4f  ,  %7.4f  ,  %8.4f  ,  %5d  ,  %9.4f\n",
-          snap, z+0, step_h, cumul_h, ncpu+0, cpu_kh
+        printf "%5d  ,  %7.4f  ,  %7.4f  ,  %8.4f  ,  %5d  ,  %9.4f\n",
+          nchar+0, z+0, step_h, cumul_h, ncpu+0, cpu_kh
       }
     '
   done
