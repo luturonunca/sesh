@@ -164,6 +164,9 @@ cmd_eventstats() {
   printf "# %5s  ,  %7s  ,  %6s  ,  %6s  ,  %6s  ,  %6s  ,  %6s\n" \
     "-----" "-------" "------" "------" "------" "------" "------"
 
+  local use_color=0
+  [[ -t 1 && -z "${NO_COLOR:-}" ]] && use_color=1
+
   local outdir outname nchar z
   local -a files
   for outdir in "${outputs[@]}"; do
@@ -178,15 +181,20 @@ cmd_eventstats() {
     shopt -u nullglob
     (( ${#files[@]} )) || die "no stars_*.out* found in $outdir"
     z=$(cmd_z "$outdir") || die "failed z for $outdir"
-    awk -v nchar="$nchar" -v z="$z" '
+    awk -v nchar="$nchar" -v z="$z" -v color="$use_color" '
       $1==0 {c0++}
       $1==1 {c1++}
       $1==2 {c2++}
       $1==3 {c3++}
       $1==4 {c4++}
+      function col(n,    s) {
+        s = sprintf("%6d", n)
+        if (color && n > 0) return sprintf("\033[36m%s\033[0m", s)
+        return s
+      }
       END {
-        printf "%5d  ,  %7.4f  ,  %6d  ,  %6d  ,  %6d  ,  %6d  ,  %6d\n",
-          nchar+0, z+0, c0+0, c1+0, c2+0, c3+0, c4+0
+        printf "%5d  ,  %7.4f  ,  %s  ,  %s  ,  %s  ,  %s  ,  %s\n",
+          nchar+0, z+0, col(c0+0), col(c1+0), col(c2+0), col(c3+0), col(c4+0)
       }
     ' "${files[@]}"
   done
