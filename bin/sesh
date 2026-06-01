@@ -82,13 +82,15 @@ cmd_z_all() {
   outputs=(./output_*)
   shopt -u nullglob
   (( ${#outputs[@]} )) || die "no output_* directories found in ."
-  local outdir outname
+  printf "# %5s  ,  %7s\n" "output" "z"
+  printf "# %5s  ,  %7s\n" "-----" "-------"
+  local outdir outname nchar z
   for outdir in "${outputs[@]}"; do
     [[ -d "$outdir" ]] || continue
     outname=$(basename -- "$outdir")
-    local z
+    nchar="${outname#output_}"
     z=$(cmd_z "$outdir") || die "failed z for $outdir"
-    printf "%s z=%s\n" "$outname" "$z"
+    printf "%5d  ,  %7.4f\n" "10#$nchar" "$z"
   done
 }
 
@@ -121,13 +123,26 @@ cmd_time_all() {
   outputs=(./output_*)
   shopt -u nullglob
   (( ${#outputs[@]} )) || die "no output_* directories found in ."
-  local outdir outname
+  printf "# %5s  ,  %7s  ,  %8s  ,  %8s\n" "output" "z" "t_Gyr" "lkbk_Gyr"
+  printf "# %5s  ,  %7s  ,  %8s  ,  %8s\n" "-----" "-------" "--------" "--------"
+  local outdir outname nchar info
   for outdir in "${outputs[@]}"; do
     [[ -d "$outdir" ]] || continue
     outname=$(basename -- "$outdir")
-    local line
-    line=$(cmd_time "$outdir") || die "failed time for $outdir"
-    printf "%s %s\n" "$outname" "$line"
+    nchar="${outname#output_}"
+    info=$(find_info_file "$outdir") || continue
+    awk -v nchar="$nchar" '
+      function asinh(x) { return log(x + sqrt((x * x) + 1.0)) }
+      /aexp/ { a=$3 } /H0/ { H0=$3 } /omega_m/ { Om=$3 } /omega_l/ { Ol=$3 }
+      END {
+        if (a<=0 || H0<=0 || Om<=0 || Ol<=0) exit 1
+        z=1/a-1
+        H0s=H0*1000/(3.085677581e22); tH=1/H0s/3.15576e16
+        t=(2/(3*sqrt(Ol)))*asinh(sqrt(Ol/Om)*a^(3/2))*tH
+        t0=(2/(3*sqrt(Ol)))*asinh(sqrt(Ol/Om))*tH
+        printf "%5d  ,  %7.4f  ,  %8.4f  ,  %8.4f\n", nchar+0, z, t, t0-t
+      }
+    ' "$info" || die "cosmology calculation failed for $info"
   done
 }
 
@@ -144,42 +159,34 @@ cmd_eventstats() {
   shopt -u nullglob
   (( ${#outputs[@]} )) || die "no output_* directories found in $root"
 
-  local outdir outname
+  printf "# %5s  ,  %7s  ,  %6s  ,  %6s  ,  %6s  ,  %6s  ,  %6s\n" \
+    "output" "z" "SF" "SN" "B-SF" "B-SN2" "B-MRG"
+  printf "# %5s  ,  %7s  ,  %6s  ,  %6s  ,  %6s  ,  %6s  ,  %6s\n" \
+    "-----" "-------" "------" "------" "------" "------" "------"
+
+  local outdir outname nchar z
   local -a files
   for outdir in "${outputs[@]}"; do
     [[ -d "$outdir" ]] || continue
     outname=$(basename -- "$outdir")
+    nchar="${outname#output_}"
     if [[ -n "$start" ]]; then
-      local num="${outname#output_}"
-      if (( 10#$num < 10#$start )); then
-        continue
-      fi
+      (( 10#$nchar < 10#$start )) && continue
     fi
     shopt -s nullglob
     files=("$outdir"/stars_*.out*)
     shopt -u nullglob
     (( ${#files[@]} )) || die "no stars_*.out* found in $outdir"
-    local z
     z=$(cmd_z "$outdir") || die "failed z for $outdir"
-    awk -v out="$outname" -v z="$z" '
+    awk -v nchar="$nchar" -v z="$z" '
       $1==0 {c0++}
       $1==1 {c1++}
       $1==2 {c2++}
       $1==3 {c3++}
       $1==4 {c4++}
-      function colorize(label, n) {
-        if (n>0) return sprintf("\033[36m%s:%d\033[0m", label, n)
-        return sprintf("%s:%d", label, n)
-      }
-      function fmtz(val, absval, dec) {
-        absval = (val < 0) ? -val : val
-        if (absval <= 0) return "0"
-        dec = 2 - int(log(absval) / log(10))
-        if (dec < 0) dec = 0
-        return sprintf("%.*f", dec, val)
-      }
       END {
-        printf "%s %s %s %s %s %s        z=%s\n", out, colorize("SF", c0+0), colorize("SN", c1+0), colorize("B-SF", c2+0), colorize("B-SN2", c3+0), colorize("B-MRG", c4+0), fmtz(z+0)
+        printf "%5d  ,  %7.4f  ,  %6d  ,  %6d  ,  %6d  ,  %6d  ,  %6d\n",
+          nchar+0, z+0, c0+0, c1+0, c2+0, c3+0, c4+0
       }
     ' "${files[@]}"
   done
