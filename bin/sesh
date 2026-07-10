@@ -343,7 +343,7 @@ cmd_report() {
   local -a field_arr
   IFS=',' read -ra field_arr <<< "$fields"
 
-  local header="snapshot"
+  local header="output"
   local f
   for f in "${field_arr[@]}"; do
     case "$f" in
@@ -371,8 +371,8 @@ cmd_report() {
     for snap in $(printf '%s\n' "${snaps[@]}" | sort -V); do
       [[ -d "$snap" ]] || continue
       snapname=$(basename -- "$snap")
+      num="${snapname#output_}"
       if [[ -n "$start" ]]; then
-        num="${snapname#output_}"
         (( 10#$num < 10#$start )) && continue
       fi
       shopt -s nullglob
@@ -381,7 +381,7 @@ cmd_report() {
       (( ${#ifiles[@]} )) || continue
       infofile="${ifiles[0]}"
 
-      row="$snapname"
+      row="$((10#$num))"
       for f in "${field_arr[@]}"; do
         case "$f" in
           z)

@@ -254,8 +254,8 @@ Msol/yr   = code_rate  * unit_d * unit_l^3 / unit_t * 3.15576e7 / 1.9885e33
 
 ```bash
 sesh report /path/to/sim --preset sink_evol:3 --out sink3_history.csv
-# snapshot,z,t_Gyr,msink_3_Msol,accrate_3_Msolyr
-# output_00001,9.0000,0.5370,1.2000e+02,3.1000e-04
-# output_00002,7.4320,0.7120,4.5000e+02,8.7000e-04
+# output,z,t_Gyr,msink_3_Msol,accrate_3_Msolyr
+# 1,9.0000,0.5370,1.2000e+02,3.1000e-04
+# 2,7.4320,0.7120,4.5000e+02,8.7000e-04
 # ...
 ```
