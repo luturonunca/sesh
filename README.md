@@ -28,6 +28,7 @@ sesh eventstats <outputs_root> [--from N]
 sesh simstatus [--path DIR]
 sesh walltime <sim_dir> [--to-z Z]
 sesh sinkmass <sim_dir> <id>
+sesh report <sim_dir> [--fields f1,f2,...|--preset name] [--out file] [--from N]
 ```
 
 ---
@@ -192,3 +193,59 @@ M_sol = msink * unit_d * unit_l^3 / 1.9885e33
 ```
 
 where `unit_d` (g/cm³) and `unit_l` (cm) are read from the `info_XXXXX.txt` of the same snapshot.
+
+---
+
+### `sesh report <sim_dir> [options]`
+
+Write a per-snapshot CSV table to a file, with columns chosen by `--fields` or a named `--preset`. Snapshots are sorted by number; rows where a field can't be computed (missing file, missing unit) get `NA`. Output is prefixed with a `#` header row for `numpy.genfromtxt`-style loading.
+
+```bash
+sesh report /path/to/sim --preset cosmo --out cosmo.csv
+sesh report /path/to/sim --fields z,t,sinkmass:3,accrate:3 --out sink3.csv
+```
+
+#### Options
+
+| Option           | Description                                              |
+|------------------|------------------------------------------------------------|
+| `--fields f1,f2,...` | Comma-separated list of fields (see table below)      |
+| `--preset name`  | Named field combination (mutually exclusive with `--fields`) |
+| `--out file`     | Output file (default: `sesh_report.csv`)                 |
+| `--from N`       | Skip outputs before `output_N`                            |
+
+#### Fields
+
+| Field          | Column header            | Source                                              |
+|----------------|---------------------------|------------------------------------------------------|
+| `z`            | `z`                       | `aexp` in `info_XXXXX.txt`                           |
+| `t`            | `t_Gyr`                   | Cosmological age (Friedmann integration)             |
+| `lookback`     | `lookback_Gyr`            | Lookback time                                        |
+| `nstars`       | `nstars`                  | Line count of `stars_*.out*`                         |
+| `sinkmass:N`   | `msink_N_Msol`            | Column 2 (`msink`) of `sink_XXXXX.csv` for sink id `N` |
+| `smbhmass:N`   | `msmbh_N_Msol`            | Column 21 (`mbh`) of `sink_XXXXX.csv` for sink id `N`  |
+| `accrate:N`    | `accrate_N_Msolyr`        | Column 13 (`acc_rate`) of `sink_XXXXX.csv` for sink id `N`, converted to Msol/yr |
+
+Sink-derived fields (`sinkmass`, `smbhmass`, `accrate`) use the same code-unit conversion as [`sinkmass`](#sesh-sinkmass-sim_dir-id), reading `unit_l`, `unit_d`, and (for `accrate`) `unit_t` from `info_XXXXX.txt`:
+
+```
+Msol      = code_mass  * unit_d * unit_l^3 / 1.9885e33
+Msol/yr   = code_rate  * unit_d * unit_l^3 / unit_t * 3.15576e7 / 1.9885e33
+```
+
+#### Presets
+
+| Preset         | Equivalent `--fields`                          | Use case                                  |
+|----------------|-------------------------------------------------|--------------------------------------------|
+| `z_stars`      | `z,nstars`                                       | Star formation history                     |
+| `cosmo`        | `z,t,lookback`                                   | Cosmological time axis                     |
+| `z_bh:N`       | `z,sinkmass:N,smbhmass:N`                        | BH mass vs. SMBH sub-component for sink `N` |
+| `sink_evol:N`  | `z,t,sinkmass:N,accrate:N`                       | Mass and accretion-rate growth history for sink `N` |
+
+```bash
+sesh report /path/to/sim --preset sink_evol:3 --out sink3_history.csv
+# snapshot,z,t_Gyr,msink_3_Msol,accrate_3_Msolyr
+# output_00001,9.0000,0.5370,1.2000e+02,3.1000e-04
+# output_00002,7.4320,0.7120,4.5000e+02,8.7000e-04
+# ...
+```

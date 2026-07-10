@@ -21,8 +21,8 @@ Subcommands:
   sinkmass <sim_dir> <id> [--snap N]  msink and msmbh in solar masses for a sink ID (latest or snapshot N)
   walltime <sim_dir> [--to-z Z]   Cumulative wall time and CPU-Kh per output up to redshift Z
   report <sim_dir> [options]      Write per-snapshot CSV table (numpy-loadable)
-    --fields f1,f2,...            Fields: z, t, lookback, nstars, sinkmass:N, smbhmass:N
-    --preset z_stars|cosmo|z_bh:N Named field combination
+    --fields f1,f2,...            Fields: z, t, lookback, nstars, sinkmass:N, smbhmass:N, accrate:N
+    --preset z_stars|cosmo|z_bh:N|sink_evol:N  Named field combination
     --out <file>                  Output file (default: sesh_report.csv)
     --from N                      Skip outputs before output_N
 
@@ -293,7 +293,12 @@ cmd_report() {
         [[ "$bh_preset" =~ ^[0-9]+$ ]] || die "report: z_bh preset requires numeric id"
         fields="z,sinkmass:${bh_preset},smbhmass:${bh_preset}"
         ;;
-      *) die "report: unknown preset '$preset' (known: z_stars, cosmo, z_bh:<id>)" ;;
+      sink_evol:*)
+        local sink_preset="${preset#sink_evol:}"
+        [[ "$sink_preset" =~ ^[0-9]+$ ]] || die "report: sink_evol preset requires numeric id"
+        fields="z,t,sinkmass:${sink_preset},accrate:${sink_preset}"
+        ;;
+      *) die "report: unknown preset '$preset' (known: z_stars, cosmo, z_bh:<id>, sink_evol:<id>)" ;;
     esac
   fi
 
@@ -312,6 +317,7 @@ cmd_report() {
       nstars)     header+=",nstars" ;;
       sinkmass:*) header+=",msink_${f#sinkmass:}_Msol" ;;
       smbhmass:*) header+=",msmbh_${f#smbhmass:}_Msol" ;;
+      accrate:*)  header+=",accrate_${f#accrate:}_Msolyr" ;;
       *) die "report: unknown field '$f'" ;;
     esac
   done
@@ -324,7 +330,7 @@ cmd_report() {
 
   {
     printf "# %s\n" "$header"
-    local snap snapname num infofile val row bh_id nchar csvfile unit_l unit_d
+    local snap snapname num infofile val row bh_id nchar csvfile unit_l unit_d unit_t
     local -a sfiles ifiles
     for snap in $(printf '%s\n' "${snaps[@]}" | sort -V); do
       [[ -d "$snap" ]] || continue
@@ -403,6 +409,23 @@ cmd_report() {
               val=$(awk -F',' -v id="$bh_id" -v ul="$unit_l" -v ud="$unit_d" '
                 /^#/ { next }
                 $1+0==id+0 { printf "%.4e", ($21+0)*ud*ul^3/1.9885e33; found=1; exit }
+                END { if (!found) print "NA" }
+              ' "$csvfile")
+            else
+              val="NA"
+            fi
+            ;;
+          accrate:*)
+            bh_id="${f#accrate:}"
+            nchar="${snapname#output_}"
+            csvfile="$snap/sink_${nchar}.csv"
+            unit_l=$(get_param unit_l "$infofile")
+            unit_d=$(get_param unit_d "$infofile")
+            unit_t=$(get_param unit_t "$infofile")
+            if [[ -f "$csvfile" && -n "$unit_l" && -n "$unit_d" && -n "$unit_t" ]]; then
+              val=$(awk -F',' -v id="$bh_id" -v ul="$unit_l" -v ud="$unit_d" -v ut="$unit_t" '
+                /^#/ { next }
+                $1+0==id+0 { printf "%.4e", ($13+0)*ud*ul^3/ut*3.15576e7/1.9885e33; found=1; exit }
                 END { if (!found) print "NA" }
               ' "$csvfile")
             else
