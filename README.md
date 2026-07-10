@@ -101,20 +101,20 @@ Use `--from N` to skip outputs before `output_N`:
 sesh eventstats /path/to/sim
 sesh eventstats /path/to/sim --from 12
 
-# output  ,        z  ,      SF  ,      SN  ,    B-SF  ,   B-SN2  ,   B-MRG  ,    Born
+# output  ,        z  ,      SF  ,      SN  ,    B-SF  ,   B-SN2  ,   B-MRG  ,   Sinks
 #     12  ,   4.2100  ,     104  ,      17  ,       3  ,       1  ,       0  ,       2
 #     13  ,   3.8700  ,      98  ,      21  ,       2  ,       0  ,       0  ,       0
 ```
 
 Non-zero counts are highlighted in cyan.
 
-#### `Born` column: sink formation count
+#### `Sinks` column: sink formation count
 
-`stars_*.out*` files carry no information about sinks, and `sink_XXXXX.csv` is only a snapshot of currently-existing sinks (one row per live sink, no per-snapshot formation log). `Born` is therefore computed as the set difference between the sink IDs present in the current output and those present in the previous *processed* output.
+`stars_*.out*` files carry no information about sinks, and `sink_XXXXX.csv` is only a snapshot of currently-existing sinks (one row per live sink, no per-snapshot formation log). `Sinks` is therefore computed as the set difference between the sink IDs present in the current output and those present in the previous *processed* output — i.e. how many new sinks formed since then.
 
 This is **not** simply `nsink_curr - nsink_prev`: RAMSES sinks can merge (`clean_merged_sinks` in `pm/sink_particle.f90`), which removes a sink from the count, so a plain difference undercounts births whenever a formation and a merger land in the same interval. Sink IDs are assigned from a monotonically increasing counter and are never reused after a merge, so comparing ID sets is exact.
 
-`Born` is `NA` for the first processed snapshot (no prior state to diff against) and whenever `sink_XXXXX.csv` is missing for that output (e.g. sink physics disabled).
+`Sinks` is `NA` for the first processed snapshot (no prior state to diff against) and whenever `sink_XXXXX.csv` is missing for that output (e.g. sink physics disabled).
 
 ---
 

@@ -160,7 +160,7 @@ cmd_eventstats() {
   (( ${#outputs[@]} )) || die "no output_* directories found in $root"
 
   printf "# %5s  ,  %7s  ,  %6s  ,  %6s  ,  %6s  ,  %6s  ,  %6s  ,  %6s\n" \
-    "output" "z" "SF" "SN" "B-SF" "B-SN2" "B-MRG" "Born"
+    "output" "z" "SF" "SN" "B-SF" "B-SN2" "B-MRG" "Sinks"
   printf "# %5s  ,  %7s  ,  %6s  ,  %6s  ,  %6s  ,  %6s  ,  %6s  ,  %6s\n" \
     "-----" "-------" "------" "------" "------" "------" "------" "------"
 
