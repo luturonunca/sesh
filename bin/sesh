@@ -16,7 +16,7 @@ Usage:
 Subcommands:
   z <output_dir>                  Redshift of a single snapshot (or 'all' for every output_* in cwd)
   time <output_dir>               Redshift, age, and lookback time (or 'all')
-  eventstats <root> [--from N]    Count SF/SN/B-SF/B-SN2/B-MRG events per snapshot from stars_*.out*
+  eventstats <root> [--from N]    Count SF/SN/B-SF/B-SN2/B-MRG events (stars_*.out*) and sink births (sink_*.csv) per snapshot
   simstatus [--path DIR]          One-line status per simulation: latest snapshot, z, last write time
   sinkmass <sim_dir> <id> [--snap N]  msink and msmbh in solar masses for a sink ID (latest or snapshot N)
   walltime <sim_dir> [--to-z Z]   Cumulative wall time and CPU-Kh per output up to redshift Z
@@ -159,15 +159,16 @@ cmd_eventstats() {
   shopt -u nullglob
   (( ${#outputs[@]} )) || die "no output_* directories found in $root"
 
-  printf "# %5s  ,  %7s  ,  %6s  ,  %6s  ,  %6s  ,  %6s  ,  %6s\n" \
-    "output" "z" "SF" "SN" "B-SF" "B-SN2" "B-MRG"
-  printf "# %5s  ,  %7s  ,  %6s  ,  %6s  ,  %6s  ,  %6s  ,  %6s\n" \
-    "-----" "-------" "------" "------" "------" "------" "------"
+  printf "# %5s  ,  %7s  ,  %6s  ,  %6s  ,  %6s  ,  %6s  ,  %6s  ,  %6s\n" \
+    "output" "z" "SF" "SN" "B-SF" "B-SN2" "B-MRG" "Born"
+  printf "# %5s  ,  %7s  ,  %6s  ,  %6s  ,  %6s  ,  %6s  ,  %6s  ,  %6s\n" \
+    "-----" "-------" "------" "------" "------" "------" "------" "------"
 
   local use_color=0
   [[ -t 1 && -z "${NO_COLOR:-}" ]] && use_color=1
 
-  local outdir outname nchar z
+  local outdir outname nchar z sinkfile curr_ids born
+  local prev_ids="" have_prev=0
   local -a files
   for outdir in "${outputs[@]}"; do
     [[ -d "$outdir" ]] || continue
@@ -181,7 +182,36 @@ cmd_eventstats() {
     shopt -u nullglob
     (( ${#files[@]} )) || die "no stars_*.out* found in $outdir"
     z=$(cmd_z "$outdir") || die "failed z for $outdir"
-    awk -v nchar="$nchar" -v z="$z" -v color="$use_color" '
+
+    # Sink birth = ids present now but absent from the previous processed
+    # snapshot. A raw nsink diff would undercount whenever a merger and a
+    # formation land in the same interval, since ids are never reused
+    # (monotonic nindsink counter in RAMSES) but merged sinks disappear.
+    sinkfile="$outdir/sink_${nchar}.csv"
+    if [[ -f "$sinkfile" ]]; then
+      curr_ids=$(awk -F',' '/^#/ { next } { print $1+0 }' "$sinkfile")
+      if (( have_prev )); then
+        born=$(awk -v prev="$prev_ids" -v curr="$curr_ids" '
+          BEGIN {
+            n = split(prev, p, "\n")
+            for (i = 1; i <= n; i++) if (p[i] != "") seen[p[i]] = 1
+            m = split(curr, c, "\n")
+            cnt = 0
+            for (i = 1; i <= m; i++) if (c[i] != "" && !(c[i] in seen)) cnt++
+            print cnt
+          }')
+      else
+        born="NA"
+      fi
+      prev_ids="$curr_ids"
+      have_prev=1
+    else
+      born="NA"
+      prev_ids=""
+      have_prev=0
+    fi
+
+    awk -v nchar="$nchar" -v z="$z" -v color="$use_color" -v born="$born" '
       $1==0 {c0++}
       $1==1 {c1++}
       $1==2 {c2++}
@@ -192,9 +222,15 @@ cmd_eventstats() {
         if (color && n > 0) return sprintf("\033[36m%s\033[0m", s)
         return s
       }
+      function colborn(v,    s) {
+        if (v == "NA") return sprintf("%6s", "NA")
+        s = sprintf("%6d", v+0)
+        if (color && v+0 > 0) return sprintf("\033[36m%s\033[0m", s)
+        return s
+      }
       END {
-        printf "%5d  ,  %7.4f  ,  %s  ,  %s  ,  %s  ,  %s  ,  %s\n",
-          nchar+0, z+0, col(c0+0), col(c1+0), col(c2+0), col(c3+0), col(c4+0)
+        printf "%5d  ,  %7.4f  ,  %s  ,  %s  ,  %s  ,  %s  ,  %s  ,  %s\n",
+          nchar+0, z+0, col(c0+0), col(c1+0), col(c2+0), col(c3+0), col(c4+0), colborn(born)
       }
     ' "${files[@]}"
   done

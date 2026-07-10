@@ -83,7 +83,7 @@ sesh time all
 
 ### `sesh eventstats <outputs_root> [--from N]`
 
-Per snapshot, count stellar feedback events by type from `stars_*.out*` files.
+Per snapshot, count stellar feedback events by type from `stars_*.out*` files, plus the number of sinks born.
 
 Event IDs correspond to RAMSES stellar particle types:
 
@@ -93,6 +93,7 @@ Event IDs correspond to RAMSES stellar particle types:
 | 1  | SN    | Supernova (single star) |
 | 2  | B-SF  | Binary star formation |
 | 3  | B-SN2 | Binary neutron star / second supernova |
+| 4  | B-MRG | Binary merger |
 
 Use `--from N` to skip outputs before `output_N`:
 
@@ -100,11 +101,20 @@ Use `--from N` to skip outputs before `output_N`:
 sesh eventstats /path/to/sim
 sesh eventstats /path/to/sim --from 12
 
-# output_00012 SF:104 SN:17 B-SF:3 B-SN2:1        z=4.21
-# output_00013 SF:98  SN:21 B-SF:2 B-SN2:0        z=3.87
+# output  ,        z  ,      SF  ,      SN  ,    B-SF  ,   B-SN2  ,   B-MRG  ,    Born
+#     12  ,   4.2100  ,     104  ,      17  ,       3  ,       1  ,       0  ,       2
+#     13  ,   3.8700  ,      98  ,      21  ,       2  ,       0  ,       0  ,       0
 ```
 
 Non-zero counts are highlighted in cyan.
+
+#### `Born` column: sink formation count
+
+`stars_*.out*` files carry no information about sinks, and `sink_XXXXX.csv` is only a snapshot of currently-existing sinks (one row per live sink, no per-snapshot formation log). `Born` is therefore computed as the set difference between the sink IDs present in the current output and those present in the previous *processed* output.
+
+This is **not** simply `nsink_curr - nsink_prev`: RAMSES sinks can merge (`clean_merged_sinks` in `pm/sink_particle.f90`), which removes a sink from the count, so a plain difference undercounts births whenever a formation and a merger land in the same interval. Sink IDs are assigned from a monotonically increasing counter and are never reused after a merge, so comparing ID sets is exact.
+
+`Born` is `NA` for the first processed snapshot (no prior state to diff against) and whenever `sink_XXXXX.csv` is missing for that output (e.g. sink physics disabled).
 
 ---
 
