@@ -235,12 +235,14 @@ sesh report /path/to/sim --fields z,t,sinkmass:3,accrate:3 --out sink3.csv
 | `sinkmass:N`   | `msink_N_Msol`            | Column 2 (`msink`) of `sink_XXXXX.csv` for sink id `N` |
 | `smbhmass:N`   | `msmbh_N_Msol`            | Column 21 (`mbh`) of `sink_XXXXX.csv` for sink id `N`  |
 | `accrate:N`    | `accrate_N_Msolyr`        | Column 13 (`acc_rate`) of `sink_XXXXX.csv` for sink id `N`, converted to Msol/yr |
+| `rho:N`        | `rho_N_gcm3`              | Column 15 (`rho_gas`) of `sink_XXXXX.csv` for sink id `N`, converted to g/cm³ |
 
-Sink-derived fields (`sinkmass`, `smbhmass`, `accrate`) use the same code-unit conversion as [`sinkmass`](#sesh-sinkmass-sim_dir-id), reading `unit_l`, `unit_d`, and (for `accrate`) `unit_t` from `info_XXXXX.txt`:
+Sink-derived fields (`sinkmass`, `smbhmass`, `accrate`, `rho`) use the same code-unit conversion as [`sinkmass`](#sesh-sinkmass-sim_dir-id), reading `unit_l`, `unit_d`, and (for `accrate`) `unit_t` from `info_XXXXX.txt`:
 
 ```
 Msol      = code_mass  * unit_d * unit_l^3 / 1.9885e33
 Msol/yr   = code_rate  * unit_d * unit_l^3 / unit_t * 3.15576e7 / 1.9885e33
+g/cm^3    = code_density * unit_d
 ```
 
 #### Presets

@@ -21,7 +21,7 @@ Subcommands:
   sinkmass <sim_dir> <id> [--snap N]  msink and msmbh in solar masses for a sink ID (latest or snapshot N)
   walltime <sim_dir> [--to-z Z]   Cumulative wall time and CPU-Kh per output up to redshift Z
   report <sim_dir> [options]      Write per-snapshot CSV table (numpy-loadable)
-    --fields f1,f2,...            Fields: z, t, lookback, nstars, sinkmass:N, smbhmass:N, accrate:N
+    --fields f1,f2,...            Fields: z, t, lookback, nstars, sinkmass:N, smbhmass:N, accrate:N, rho:N
     --preset z_stars|cosmo|z_bh:N|sink_evol:N  Named field combination
     --out <file>                  Output file (default: sesh_report.csv)
     --from N                      Skip outputs before output_N
@@ -354,6 +354,7 @@ cmd_report() {
       sinkmass:*) header+=",msink_${f#sinkmass:}_Msol" ;;
       smbhmass:*) header+=",msmbh_${f#smbhmass:}_Msol" ;;
       accrate:*)  header+=",accrate_${f#accrate:}_Msolyr" ;;
+      rho:*)      header+=",rho_${f#rho:}_gcm3" ;;
       *) die "report: unknown field '$f'" ;;
     esac
   done
@@ -462,6 +463,21 @@ cmd_report() {
               val=$(awk -F',' -v id="$bh_id" -v ul="$unit_l" -v ud="$unit_d" -v ut="$unit_t" '
                 /^#/ { next }
                 $1+0==id+0 { printf "%.4e", ($13+0)*ud*ul^3/ut*3.15576e7/1.9885e33; found=1; exit }
+                END { if (!found) print "NA" }
+              ' "$csvfile")
+            else
+              val="NA"
+            fi
+            ;;
+          rho:*)
+            bh_id="${f#rho:}"
+            nchar="${snapname#output_}"
+            csvfile="$snap/sink_${nchar}.csv"
+            unit_d=$(get_param unit_d "$infofile")
+            if [[ -f "$csvfile" && -n "$unit_d" ]]; then
+              val=$(awk -F',' -v id="$bh_id" -v ud="$unit_d" '
+                /^#/ { next }
+                $1+0==id+0 { printf "%.4e", ($15+0)*ud; found=1; exit }
                 END { if (!found) print "NA" }
               ' "$csvfile")
             else
