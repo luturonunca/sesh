@@ -386,7 +386,7 @@ cmd_report() {
       for f in "${field_arr[@]}"; do
         case "$f" in
           z)
-            val=$(awk '/aexp/ { a=$3 } END { if (a>0) printf "%.6f", (1.0/a)-1.0; else exit 1 }' "$infofile") || val="NA"
+            val=$(awk '/aexp/ { a=$3 } END { if (a>0) printf "%.6f", (1.0/a)-1.0; else exit 1 }' "$infofile") || val="nan"
             ;;
           t)
             val=$(awk '
@@ -396,7 +396,7 @@ cmd_report() {
                 if (a<=0||H0<=0||Om<=0||Ol<=0) exit 1
                 H0s=H0*1000/(3.085677581e22); tH=1/H0s/3.15576e16
                 printf "%.4f", (2/(3*sqrt(Ol)))*asinh(sqrt(Ol/Om)*a^(3/2))*tH
-              }' "$infofile") || val="NA"
+              }' "$infofile") || val="nan"
             ;;
           lookback)
             val=$(awk '
@@ -408,7 +408,7 @@ cmd_report() {
                 t=(2/(3*sqrt(Ol)))*asinh(sqrt(Ol/Om)*a^(3/2))*tH
                 t0=(2/(3*sqrt(Ol)))*asinh(sqrt(Ol/Om))*tH
                 printf "%.4f", t0-t
-              }' "$infofile") || val="NA"
+              }' "$infofile") || val="nan"
             ;;
           nstars)
             shopt -s nullglob
@@ -417,7 +417,7 @@ cmd_report() {
             if (( ${#sfiles[@]} )); then
               val=$(awk 'END { print NR }' "${sfiles[@]}")
             else
-              val="NA"
+              val="nan"
             fi
             ;;
           sinkmass:*)
@@ -430,10 +430,10 @@ cmd_report() {
               val=$(awk -F',' -v id="$bh_id" -v ul="$unit_l" -v ud="$unit_d" '
                 /^#/ { next }
                 $1+0==id+0 { printf "%.4e", ($2+0)*ud*ul^3/1.9885e33; found=1; exit }
-                END { if (!found) print "NA" }
+                END { if (!found) print "nan" }
               ' "$csvfile")
             else
-              val="NA"
+              val="nan"
             fi
             ;;
           smbhmass:*)
@@ -446,10 +446,10 @@ cmd_report() {
               val=$(awk -F',' -v id="$bh_id" -v ul="$unit_l" -v ud="$unit_d" '
                 /^#/ { next }
                 $1+0==id+0 { printf "%.4e", ($21+0)*ud*ul^3/1.9885e33; found=1; exit }
-                END { if (!found) print "NA" }
+                END { if (!found) print "nan" }
               ' "$csvfile")
             else
-              val="NA"
+              val="nan"
             fi
             ;;
           accrate:*)
@@ -463,10 +463,10 @@ cmd_report() {
               val=$(awk -F',' -v id="$bh_id" -v ul="$unit_l" -v ud="$unit_d" -v ut="$unit_t" '
                 /^#/ { next }
                 $1+0==id+0 { printf "%.4e", ($13+0)*ud*ul^3/ut*3.15576e7/1.9885e33; found=1; exit }
-                END { if (!found) print "NA" }
+                END { if (!found) print "nan" }
               ' "$csvfile")
             else
-              val="NA"
+              val="nan"
             fi
             ;;
           rho:*)
@@ -478,10 +478,10 @@ cmd_report() {
               val=$(awk -F',' -v id="$bh_id" -v ud="$unit_d" '
                 /^#/ { next }
                 $1+0==id+0 { printf "%.4e", ($15+0)*ud; found=1; exit }
-                END { if (!found) print "NA" }
+                END { if (!found) print "nan" }
               ' "$csvfile")
             else
-              val="NA"
+              val="nan"
             fi
             ;;
         esac

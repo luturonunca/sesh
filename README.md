@@ -208,7 +208,7 @@ where `unit_d` (g/cm³) and `unit_l` (cm) are read from the `info_XXXXX.txt` of 
 
 ### `sesh report <sim_dir> [options]`
 
-Write a per-snapshot CSV table to a file, with columns chosen by `--fields` or a named `--preset`. Snapshots are sorted by number; rows where a field can't be computed (missing file, missing unit) get `NA`. Output is prefixed with a `#` header row for `numpy.genfromtxt`-style loading.
+Write a per-snapshot CSV table to a file, with columns chosen by `--fields` or a named `--preset`. Snapshots are sorted by number; rows where a field can't be computed (missing file, missing unit, e.g. no sink yet) get `nan`, so the file loads directly with `numpy.loadtxt(file, delimiter=',')` — no `NA`/missing-value handling needed. Output is prefixed with a `#` header row.
 
 ```bash
 sesh report /path/to/sim --preset cosmo --out cosmo.csv
