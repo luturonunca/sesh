@@ -355,6 +355,9 @@ cmd_report() {
       smbhmass:*) header+=",msmbh_${f#smbhmass:}_Msol" ;;
       accrate:*)  header+=",accrate_${f#accrate:}_Msolyr" ;;
       rho:*)      header+=",rho_${f#rho:}_gcm3" ;;
+      ffcold:*)   header+=",ffcold_${f#ffcold:}_Msolyr" ;;
+      ffhot:*)    header+=",ffhot_${f#ffhot:}_Msolyr" ;;
+      eddrat:*)   header+=",eddrat_${f#eddrat:}" ;;
       *) die "report: unknown field '$f'" ;;
     esac
   done
@@ -478,6 +481,59 @@ cmd_report() {
               val=$(awk -F',' -v id="$bh_id" -v ud="$unit_d" '
                 /^#/ { next }
                 $1+0==id+0 { printf "%.4e", ($15+0)*ud; found=1; exit }
+                END { if (!found) print "nan" }
+              ' "$csvfile")
+            else
+              val="nan"
+            fi
+            ;;
+          ffcold:*)
+            bh_id="${f#ffcold:}"
+            nchar="${snapname#output_}"
+            csvfile="$snap/sink_${nchar}.csv"
+            unit_l=$(get_param unit_l "$infofile")
+            unit_d=$(get_param unit_d "$infofile")
+            unit_t=$(get_param unit_t "$infofile")
+            if [[ -f "$csvfile" && -n "$unit_l" && -n "$unit_d" && -n "$unit_t" ]]; then
+              val=$(awk -F',' -v id="$bh_id" -v ul="$unit_l" -v ud="$unit_d" -v ut="$unit_t" '
+                /^#/ { next }
+                $1+0==id+0 { printf "%.4e", ($31+0)*ud*ul^3/ut*3.15576e7/1.9885e33; found=1; exit }
+                END { if (!found) print "nan" }
+              ' "$csvfile")
+            else
+              val="nan"
+            fi
+            ;;
+          ffhot:*)
+            bh_id="${f#ffhot:}"
+            nchar="${snapname#output_}"
+            csvfile="$snap/sink_${nchar}.csv"
+            unit_l=$(get_param unit_l "$infofile")
+            unit_d=$(get_param unit_d "$infofile")
+            unit_t=$(get_param unit_t "$infofile")
+            if [[ -f "$csvfile" && -n "$unit_l" && -n "$unit_d" && -n "$unit_t" ]]; then
+              val=$(awk -F',' -v id="$bh_id" -v ul="$unit_l" -v ud="$unit_d" -v ut="$unit_t" '
+                /^#/ { next }
+                $1+0==id+0 { printf "%.4e", ($32+0)*ud*ul^3/ut*3.15576e7/1.9885e33; found=1; exit }
+                END { if (!found) print "nan" }
+              ' "$csvfile")
+            else
+              val="nan"
+            fi
+            ;;
+          eddrat:*)
+            bh_id="${f#eddrat:}"
+            nchar="${snapname#output_}"
+            csvfile="$snap/sink_${nchar}.csv"
+            unit_t=$(get_param unit_t "$infofile")
+            if [[ -f "$csvfile" && -n "$unit_t" ]]; then
+              val=$(awk -F',' -v id="$bh_id" -v ut="$unit_t" '
+                /^#/ { next }
+                $1+0==id+0 {
+                  if ($2+0>0) printf "%.4e", ($13/$2)*(1.4222e15/ut)
+                  else print "nan"
+                  found=1; exit
+                }
                 END { if (!found) print "nan" }
               ' "$csvfile")
             else
