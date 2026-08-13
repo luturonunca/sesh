@@ -25,6 +25,7 @@ Subcommands:
     --preset z_stars|cosmo|z_bh:N|sink_evol:N  Named field combination
     --out <file>                  Output file (default: sesh_report.csv)
     --from N                      Skip outputs before output_N
+    --source output|movie|both    Sink data from output_*/ (default), movie1/ frames, or both
 
 EOF
 }
@@ -308,16 +309,22 @@ cmd_report() {
   shift
   [[ -d "$simdir" ]] || die "not a directory: $simdir"
 
-  local fields="" outfile="sesh_report.csv" start="" preset=""
+  local fields="" outfile="sesh_report.csv" start="" preset="" source="output"
   while (( $# )); do
     case "$1" in
       --fields) fields="$2"; shift 2 ;;
       --preset) preset="$2"; shift 2 ;;
       --out)    outfile="$2"; shift 2 ;;
       --from)   start="$2"; shift 2 ;;
+      --source) source="$2"; shift 2 ;;
       *) die "report: unknown option: $1" ;;
     esac
   done
+
+  case "$source" in
+    output|movie|both) ;;
+    *) die "report: unknown source '$source' (known: output, movie, both)" ;;
+  esac
 
   if [[ -n "$preset" ]]; then
     [[ -z "$fields" ]] || die "report: --preset and --fields are mutually exclusive"
@@ -343,7 +350,12 @@ cmd_report() {
   local -a field_arr
   IFS=',' read -ra field_arr <<< "$fields"
 
-  local header="output"
+  local header
+  case "$source" in
+    output) header="output" ;;
+    movie)  header="frame" ;;
+    both)   header="index" ;;   # >0 = output number, <0 = movie frame number
+  esac
   local f
   for f in "${field_arr[@]}"; do
     case "$f" in
@@ -362,17 +374,19 @@ cmd_report() {
     esac
   done
 
-  local -a snaps
-  shopt -s nullglob
-  snaps=("$simdir"/output_?????)
-  shopt -u nullglob
-  (( ${#snaps[@]} )) || die "no output_* found in $simdir"
+  # Each record is "key|infofile|sinkfile". Output snapshots and movie frames
+  # differ only in where those two files live: movie.f90 writes movie1/info_*.txt
+  # with the same output_info routine used for output_*/, and movie1/sink_*.txt
+  # with the same output_sink_csv routine used for output_*/sink_*.csv.
+  local -a recs snaps ifiles mfiles
+  local snap snapname num frame moviedir ifile rec rinfo
+  recs=()
 
-  {
-    printf "# %s\n" "$header"
-    local snap snapname num infofile val row bh_id nchar csvfile unit_l unit_d unit_t
-    local -a sfiles ifiles
-    for snap in $(printf '%s\n' "${snaps[@]}" | sort -V); do
+  if [[ "$source" == "output" || "$source" == "both" ]]; then
+    shopt -s nullglob
+    snaps=("$simdir"/output_?????)
+    shopt -u nullglob
+    for snap in "${snaps[@]}"; do
       [[ -d "$snap" ]] || continue
       snapname=$(basename -- "$snap")
       num="${snapname#output_}"
@@ -383,9 +397,68 @@ cmd_report() {
       ifiles=("$snap"/info_*.txt)
       shopt -u nullglob
       (( ${#ifiles[@]} )) || continue
-      infofile="${ifiles[0]}"
+      recs+=("$((10#$num))|${ifiles[0]}|$snap/sink_${num}.csv")
+    done
+  fi
 
-      row="$((10#$num))"
+  if [[ "$source" == "movie" || "$source" == "both" ]]; then
+    # Only movie1/ ever receives sink dumps: movie.f90 guards the call with
+    # proj_ind==1, so the other movie<N>/ dirs hold maps and info only.
+    moviedir="$simdir/movie1"
+    shopt -s nullglob
+    mfiles=("$moviedir"/sink_?????.txt)
+    shopt -u nullglob
+    for snap in "${mfiles[@]}"; do
+      snapname=$(basename -- "$snap")
+      frame="${snapname#sink_}"
+      frame="${frame%.txt}"
+      if [[ -n "$start" ]]; then
+        (( 10#$frame < 10#$start )) && continue
+      fi
+      ifile="$moviedir/info_${frame}.txt"
+      [[ -f "$ifile" ]] || continue
+      if [[ "$source" == "both" ]]; then
+        # The frame counter is independent of the output counter, so negate it
+        # to keep the two sequences distinguishable in a single column.
+        recs+=("-$((10#$frame))|$ifile|$snap")
+      else
+        recs+=("$((10#$frame))|$ifile|$snap")
+      fi
+    done
+  fi
+
+  (( ${#recs[@]} )) || die "report: no snapshots found in $simdir for source '$source'"
+
+  local -a ordered
+  ordered=()
+  if [[ "$source" == "both" ]]; then
+    # The two counters are unrelated, so order the merged table by expansion
+    # factor (time breaks ties for non-cosmological runs where aexp stays 1).
+    while IFS= read -r rec; do
+      ordered+=("$rec")
+    done < <(
+      for rec in "${recs[@]}"; do
+        rinfo="${rec#*|}"; rinfo="${rinfo%%|*}"
+        printf '%s|%s|%s\n' "$(get_param aexp "$rinfo")" "$(get_param time "$rinfo")" "$rec"
+      done | sort -t'|' -k1,1g -k2,2g | cut -d'|' -f3-
+    )
+  else
+    while IFS= read -r rec; do
+      ordered+=("$rec")
+    done < <(printf '%s\n' "${recs[@]}" | sort -t'|' -k1,1n)
+  fi
+
+  {
+    printf "# %s\n" "$header"
+    local key infofile val row bh_id csvfile unit_l unit_d unit_t
+    local -a sfiles
+    for rec in "${ordered[@]}"; do
+      key="${rec%%|*}"
+      infofile="${rec#*|}"; infofile="${infofile%%|*}"
+      csvfile="${rec##*|}"
+      snap=$(dirname -- "$csvfile")
+
+      row="$key"
       for f in "${field_arr[@]}"; do
         case "$f" in
           z)
@@ -425,8 +498,6 @@ cmd_report() {
             ;;
           sinkmass:*)
             bh_id="${f#sinkmass:}"
-            nchar="${snapname#output_}"
-            csvfile="$snap/sink_${nchar}.csv"
             unit_l=$(get_param unit_l "$infofile")
             unit_d=$(get_param unit_d "$infofile")
             if [[ -f "$csvfile" && -n "$unit_l" && -n "$unit_d" ]]; then
@@ -441,8 +512,6 @@ cmd_report() {
             ;;
           smbhmass:*)
             bh_id="${f#smbhmass:}"
-            nchar="${snapname#output_}"
-            csvfile="$snap/sink_${nchar}.csv"
             unit_l=$(get_param unit_l "$infofile")
             unit_d=$(get_param unit_d "$infofile")
             if [[ -f "$csvfile" && -n "$unit_l" && -n "$unit_d" ]]; then
@@ -457,8 +526,6 @@ cmd_report() {
             ;;
           accrate:*)
             bh_id="${f#accrate:}"
-            nchar="${snapname#output_}"
-            csvfile="$snap/sink_${nchar}.csv"
             unit_l=$(get_param unit_l "$infofile")
             unit_d=$(get_param unit_d "$infofile")
             unit_t=$(get_param unit_t "$infofile")
@@ -474,8 +541,6 @@ cmd_report() {
             ;;
           rho:*)
             bh_id="${f#rho:}"
-            nchar="${snapname#output_}"
-            csvfile="$snap/sink_${nchar}.csv"
             unit_d=$(get_param unit_d "$infofile")
             if [[ -f "$csvfile" && -n "$unit_d" ]]; then
               val=$(awk -F',' -v id="$bh_id" -v ud="$unit_d" '
@@ -489,8 +554,6 @@ cmd_report() {
             ;;
           ffcold:*)
             bh_id="${f#ffcold:}"
-            nchar="${snapname#output_}"
-            csvfile="$snap/sink_${nchar}.csv"
             unit_l=$(get_param unit_l "$infofile")
             unit_d=$(get_param unit_d "$infofile")
             unit_t=$(get_param unit_t "$infofile")
@@ -506,8 +569,6 @@ cmd_report() {
             ;;
           ffhot:*)
             bh_id="${f#ffhot:}"
-            nchar="${snapname#output_}"
-            csvfile="$snap/sink_${nchar}.csv"
             unit_l=$(get_param unit_l "$infofile")
             unit_d=$(get_param unit_d "$infofile")
             unit_t=$(get_param unit_t "$infofile")
@@ -523,8 +584,6 @@ cmd_report() {
             ;;
           eddrat:*)
             bh_id="${f#eddrat:}"
-            nchar="${snapname#output_}"
-            csvfile="$snap/sink_${nchar}.csv"
             unit_t=$(get_param unit_t "$infofile")
             if [[ -f "$csvfile" && -n "$unit_t" ]]; then
               val=$(awk -F',' -v id="$bh_id" -v ut="$unit_t" '
@@ -722,7 +781,7 @@ main() {
       cmd_walltime "$2" "$wt_to_z"
       ;;
     report)
-      [[ $# -ge 2 ]] || die "usage: sesh report <sim_dir> [--fields f1,f2,...|--preset name] [--out file] [--from N]"
+      [[ $# -ge 2 ]] || die "usage: sesh report <sim_dir> [--fields f1,f2,...|--preset name] [--out file] [--from N] [--source output|movie|both]"
       cmd_report "$2" "${@:3}"
       ;;
     -h|--help) usage ;;

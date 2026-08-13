@@ -28,7 +28,7 @@ sesh eventstats <outputs_root> [--from N]
 sesh simstatus [--path DIR]
 sesh walltime <sim_dir> [--to-z Z]
 sesh sinkmass <sim_dir> <id>
-sesh report <sim_dir> [--fields f1,f2,...|--preset name] [--out file] [--from N]
+sesh report <sim_dir> [--fields f1,f2,...|--preset name] [--out file] [--from N] [--source output|movie|both]
 ```
 
 ---
@@ -208,7 +208,7 @@ where `unit_d` (g/cm³) and `unit_l` (cm) are read from the `info_XXXXX.txt` of 
 
 ### `sesh report <sim_dir> [options]`
 
-Write a per-snapshot CSV table to a file, with columns chosen by `--fields` or a named `--preset`. Snapshots are sorted by number; rows where a field can't be computed (missing file, missing unit, e.g. no sink yet) get `nan`, so the file loads directly with `numpy.loadtxt(file, delimiter=',')` — no `NA`/missing-value handling needed. Output is prefixed with a `#` header row.
+Write a per-snapshot CSV table to a file, with columns chosen by `--fields` or a named `--preset`. Snapshots are sorted by number (by `aexp` when `--source both` merges two independently numbered sequences); rows where a field can't be computed (missing file, missing unit, e.g. no sink yet) get `nan`, so the file loads directly with `numpy.loadtxt(file, delimiter=',')` — no `NA`/missing-value handling needed. Output is prefixed with a `#` header row.
 
 ```bash
 sesh report /path/to/sim --preset cosmo --out cosmo.csv
@@ -222,7 +222,40 @@ sesh report /path/to/sim --fields z,t,sinkmass:3,accrate:3 --out sink3.csv
 | `--fields f1,f2,...` | Comma-separated list of fields (see table below)      |
 | `--preset name`  | Named field combination (mutually exclusive with `--fields`) |
 | `--out file`     | Output file (default: `sesh_report.csv`)                 |
-| `--from N`       | Skip outputs before `output_N`                            |
+| `--from N`       | Skip outputs before `output_N` (for `--source movie`, skip frames before frame `N`) |
+| `--source output\|movie\|both` | Where to read snapshots from (default: `output`) — see below |
+
+#### Sink data sources
+
+RAMSES writes sink state in two places, through the same `output_sink_csv` routine and in the same format:
+
+| Source     | Files                                              | Cadence           |
+|------------|-----------------------------------------------------|--------------------|
+| `output`   | `output_XXXXX/info_XXXXX.txt` + `sink_XXXXX.csv`   | Output cadence     |
+| `movie`    | `movie1/info_XXXXX.txt` + `sink_XXXXX.txt`         | Movie-frame cadence |
+
+Movie frames are usually written far more often than outputs, so `--source movie` gives a much finer time sampling of sink evolution. Only `movie1/` is read: RAMSES guards the sink dump with `proj_ind==1`, so the other `movieN/` directories contain maps and info files but no sink files.
+
+The first column changes with the source:
+
+| `--source` | First column | Meaning                                                              |
+|------------|--------------|------------------------------------------------------------------------|
+| `output`   | `output`     | Output number                                                          |
+| `movie`    | `frame`      | Movie frame number                                                     |
+| `both`     | `index`      | Positive = output number, negative = movie frame number                |
+
+The two counters are independent, so `both` negates frame numbers to keep the sequences distinguishable, and sorts all rows by `aexp` (falling back to `time` for non-cosmological runs) rather than by index — giving one merged, time-ordered table.
+
+`nstars` is only available for `output` rows; movie frames have no `stars_*.out*` and report `nan`.
+
+```bash
+sesh report /path/to/sim --preset sink_evol:1 --source both --out sink1_fine.csv
+# index,z,t_Gyr,msink_1_Msol,accrate_1_Msolyr
+# -1,5.666667,1.0239,1.0003e+08,1.3421e-06
+# 1,4.000000,1.5732,1.0003e+08,6.7103e-07
+# -2,3.000000,2.1915,2.0006e+08,1.3421e-06
+# ...
+```
 
 #### Fields
 
