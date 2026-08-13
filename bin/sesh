@@ -21,11 +21,12 @@ Subcommands:
   sinkmass <sim_dir> <id> [--snap N]  msink and msmbh in solar masses for a sink ID (latest or snapshot N)
   walltime <sim_dir> [--to-z Z]   Cumulative wall time and CPU-Kh per output up to redshift Z
   report <sim_dir> [options]      Write per-snapshot CSV table (numpy-loadable)
-    --fields f1,f2,...            Fields: z, t, lookback, nstars, sinkmass:N, smbhmass:N, accrate:N, rho:N
+    --fields f1,f2,...            Fields: z, t, lookback, nstars, sinkmass:N, smbhmass:N, accrate:N, rho:N, mgas:N
     --preset z_stars|cosmo|z_bh:N|sink_evol:N  Named field combination
     --out <file>                  Output file (default: sesh_report.csv)
     --from N                      Skip outputs before output_N
     --source output|movie|both    Sink data from output_*/ (default), movie1/ frames, or both
+    --ir-cloud N                  Accretion radius in cells for mgas:N (default: from namelist.txt, else 4)
 
 EOF
 }
@@ -52,6 +53,31 @@ get_param() {
       exit
     }
   ' "$file"
+}
+
+# ir_cloud sets the sink accretion radius in units of the finest cell
+# (pm_parameters.f90: "Radius of cloud region in unit of grid spacing"). It is a
+# run constant, so any output_*/namelist.txt will do -- movie frame dirs have no
+# namelist copy of their own. RAMSES defaults it to 4 when unset.
+find_ir_cloud() {
+  local simdir="$1"
+  local -a nml
+  local val
+  shopt -s nullglob
+  nml=("$simdir"/output_?????/namelist.txt)
+  shopt -u nullglob
+  if (( ${#nml[@]} )); then
+    val=$(awk '
+      /^[[:space:]]*!/ { next }
+      tolower($0) ~ /^[[:space:]]*ir_cloud[[:space:]]*=/ {
+        sub(/.*[=][[:space:]]*/, "")
+        sub(/[^0-9].*/, "")
+        if (length($0)) { print; exit }
+      }
+    ' "${nml[0]}")
+    [[ -n "$val" ]] && { printf '%s\n' "$val"; return; }
+  fi
+  printf '4\n'
 }
 
 require_param() {
@@ -309,14 +335,15 @@ cmd_report() {
   shift
   [[ -d "$simdir" ]] || die "not a directory: $simdir"
 
-  local fields="" outfile="sesh_report.csv" start="" preset="" source="output"
+  local fields="" outfile="sesh_report.csv" start="" preset="" source="output" ir_cloud=""
   while (( $# )); do
     case "$1" in
-      --fields) fields="$2"; shift 2 ;;
-      --preset) preset="$2"; shift 2 ;;
-      --out)    outfile="$2"; shift 2 ;;
-      --from)   start="$2"; shift 2 ;;
-      --source) source="$2"; shift 2 ;;
+      --fields)   fields="$2"; shift 2 ;;
+      --preset)   preset="$2"; shift 2 ;;
+      --out)      outfile="$2"; shift 2 ;;
+      --from)     start="$2"; shift 2 ;;
+      --source)   source="$2"; shift 2 ;;
+      --ir-cloud) ir_cloud="$2"; shift 2 ;;
       *) die "report: unknown option: $1" ;;
     esac
   done
@@ -325,6 +352,12 @@ cmd_report() {
     output|movie|both) ;;
     *) die "report: unknown source '$source' (known: output, movie, both)" ;;
   esac
+
+  if [[ -n "$ir_cloud" ]]; then
+    [[ "$ir_cloud" =~ ^[0-9]+$ ]] || die "report: --ir-cloud requires a positive integer"
+  else
+    ir_cloud=$(find_ir_cloud "$simdir")
+  fi
 
   if [[ -n "$preset" ]]; then
     [[ -z "$fields" ]] || die "report: --preset and --fields are mutually exclusive"
@@ -367,6 +400,7 @@ cmd_report() {
       smbhmass:*) header+=",msmbh_${f#smbhmass:}_Msol" ;;
       accrate:*)  header+=",accrate_${f#accrate:}_Msolyr" ;;
       rho:*)      header+=",rho_${f#rho:}_gcm3" ;;
+      mgas:*)     header+=",mgas_${f#mgas:}_Msol" ;;
       ffcold:*)   header+=",ffcold_${f#ffcold:}_Msolyr" ;;
       ffhot:*)    header+=",ffhot_${f#ffhot:}_Msolyr" ;;
       eddrat:*)   header+=",eddrat_${f#eddrat:}" ;;
@@ -450,7 +484,7 @@ cmd_report() {
 
   {
     printf "# %s\n" "$header"
-    local key infofile val row bh_id csvfile unit_l unit_d unit_t
+    local key infofile val row bh_id csvfile unit_l unit_d unit_t boxlen levelmax aexp
     local -a sfiles
     for rec in "${ordered[@]}"; do
       key="${rec%%|*}"
@@ -547,6 +581,34 @@ cmd_report() {
                 /^#/ { next }
                 $1+0==id+0 { printf "%.4e", ($15+0)*ud; found=1; exit }
                 END { if (!found) print "nan" }
+              ' "$csvfile")
+            else
+              val="nan"
+            fi
+            ;;
+          mgas:*)
+            # Gas mass inside the accretion radius, approximated as the mean
+            # sink-sphere density (rho_gas) times the cloud volume. RAMSES forms
+            # the exact value as rho_gas*volume_gas, but volume_gas is not
+            # written to the sink file; the cloud radius ir_cloud*dx_min is fixed
+            # in physical units, so the sphere volume stands in for it.
+            bh_id="${f#mgas:}"
+            unit_l=$(get_param unit_l "$infofile")
+            unit_d=$(get_param unit_d "$infofile")
+            boxlen=$(get_param boxlen "$infofile")
+            levelmax=$(get_param levelmax "$infofile")
+            aexp=$(get_param aexp "$infofile")
+            if [[ -f "$csvfile" && -n "$unit_l" && -n "$unit_d" && -n "$boxlen" && -n "$levelmax" && -n "$aexp" ]]; then
+              val=$(awk -F',' -v id="$bh_id" -v ul="$unit_l" -v ud="$unit_d" \
+                        -v bl="$boxlen" -v lmax="$levelmax" -v a="$aexp" -v irc="$ir_cloud" '
+                BEGIN {
+                  if (a<=0 || lmax<=0) { print "nan"; bad=1; exit }
+                  dxmin = bl*(0.5^lmax)/a
+                  vcloud = (4.0/3.0)*3.14159265358979*(irc*dxmin)^3
+                }
+                /^#/ { next }
+                $1+0==id+0 { printf "%.4e", ($15+0)*vcloud*ud*ul^3/1.9885e33; found=1; exit }
+                END { if (!bad && !found) print "nan" }
               ' "$csvfile")
             else
               val="nan"
@@ -781,7 +843,7 @@ main() {
       cmd_walltime "$2" "$wt_to_z"
       ;;
     report)
-      [[ $# -ge 2 ]] || die "usage: sesh report <sim_dir> [--fields f1,f2,...|--preset name] [--out file] [--from N] [--source output|movie|both]"
+      [[ $# -ge 2 ]] || die "usage: sesh report <sim_dir> [--fields f1,f2,...|--preset name] [--out file] [--from N] [--source output|movie|both] [--ir-cloud N]"
       cmd_report "$2" "${@:3}"
       ;;
     -h|--help) usage ;;

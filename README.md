@@ -28,7 +28,7 @@ sesh eventstats <outputs_root> [--from N]
 sesh simstatus [--path DIR]
 sesh walltime <sim_dir> [--to-z Z]
 sesh sinkmass <sim_dir> <id>
-sesh report <sim_dir> [--fields f1,f2,...|--preset name] [--out file] [--from N] [--source output|movie|both]
+sesh report <sim_dir> [--fields f1,f2,...|--preset name] [--out file] [--from N] [--source output|movie|both] [--ir-cloud N]
 ```
 
 ---
@@ -224,6 +224,7 @@ sesh report /path/to/sim --fields z,t,sinkmass:3,accrate:3 --out sink3.csv
 | `--out file`     | Output file (default: `sesh_report.csv`)                 |
 | `--from N`       | Skip outputs before `output_N` (for `--source movie`, skip frames before frame `N`) |
 | `--source output\|movie\|both` | Where to read snapshots from (default: `output`) — see below |
+| `--ir-cloud N`   | Accretion radius in cells, for `mgas:N` (default: from `namelist.txt`, else `4`) |
 
 #### Sink data sources
 
@@ -269,6 +270,7 @@ sesh report /path/to/sim --preset sink_evol:1 --source both --out sink1_fine.csv
 | `smbhmass:N`   | `msmbh_N_Msol`            | Column 21 (`mbh`) of `sink_XXXXX.csv` for sink id `N`  |
 | `accrate:N`    | `accrate_N_Msolyr`        | Column 13 (`acc_rate`) of `sink_XXXXX.csv` for sink id `N`, converted to Msol/yr |
 | `rho:N`        | `rho_N_gcm3`              | Column 15 (`rho_gas`) of `sink_XXXXX.csv` for sink id `N`, converted to g/cm³ |
+| `mgas:N`       | `mgas_N_Msol`             | Gas mass inside the accretion radius of sink `N` (see below)  |
 
 Sink-derived fields (`sinkmass`, `smbhmass`, `accrate`, `rho`) use the same code-unit conversion as [`sinkmass`](#sesh-sinkmass-sim_dir-id), reading `unit_l`, `unit_d`, and (for `accrate`) `unit_t` from `info_XXXXX.txt`:
 
@@ -276,6 +278,24 @@ Sink-derived fields (`sinkmass`, `smbhmass`, `accrate`, `rho`) use the same code
 Msol      = code_mass  * unit_d * unit_l^3 / 1.9885e33
 Msol/yr   = code_rate  * unit_d * unit_l^3 / unit_t * 3.15576e7 / 1.9885e33
 g/cm^3    = code_density * unit_d
+```
+
+#### `mgas:N` — gas mass inside the accretion radius
+
+Useful because the torque and free-fall accretion channels are both proportional to the enclosed gas mass. RAMSES computes that mass exactly (`rho_gas * volume_gas`, printed as `Mgas(Msol)` under `verbose_AGN`) but writes only `rho_gas` to the sink file, so `mgas:N` reconstructs it from the cloud volume:
+
+```
+dx_min  = boxlen / 2**levelmax / aexp          # code units, from info_XXXXX.txt
+V_cloud = (4/3) * pi * (ir_cloud * dx_min)**3
+Msol    = rho_gas * V_cloud * unit_d * unit_l**3 / 1.9885e33
+```
+
+`ir_cloud` is the accretion radius in units of the finest cell. It's a run constant, read from the first `output_*/namelist.txt` found (movie frame dirs have no namelist copy of their own) and falling back to the RAMSES default of `4`. Override it with `--ir-cloud N`.
+
+This is an approximation: `volume_gas` is the *kernel-weighted* sink-sphere volume, not the naive sphere, so the result carries a fixed O(1) offset. That factor is constant in physical units — the cloud radius `ir_cloud*dx_min` is constant by construction — so it cancels in ratios and leaves the *shape* of `M_gas(t)` correct. Calibrate it once against a `verbose_AGN` stdout line if you need absolute masses.
+
+```bash
+sesh report /path/to/sim --fields z,t,mgas:1,accrate:1 --source movie --out mgas1.csv
 ```
 
 #### Presets
