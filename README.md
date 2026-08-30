@@ -271,8 +271,19 @@ sesh report /path/to/sim --preset sink_evol:1 --source both --out sink1_fine.csv
 | `accrate:N`    | `accrate_N_Msolyr`        | Column 13 (`acc_rate`) of `sink_XXXXX.csv` for sink id `N`, converted to Msol/yr |
 | `rho:N`        | `rho_N_gcm3`              | Column 15 (`rho_gas`) of `sink_XXXXX.csv` for sink id `N`, converted to g/cm³ |
 | `mgas:N`       | `mgas_N_Msol`             | Gas mass inside the accretion radius of sink `N` (see below)  |
+| `ffcold:N`     | `ffcold_N_Msolyr`         | Column 31 (`dMdc_cold`) of `sink_XXXXX.csv`, freefall cold-gas channel, converted to Msol/yr |
+| `ffhot:N`      | `ffhot_N_Msolyr`          | Column 32 (`dMdc_hot`) of `sink_XXXXX.csv`, freefall hot-Bondi channel, converted to Msol/yr |
+| `eddrat:N`     | `eddrat_N`                | `acc_rate / msink`, in units of the Eddington ratio (dimensionless) |
+| `torque:N`     | `torque_N_Msolyr`         | Column 23 (`dMtorque`) of `sink_XXXXX.csv`, `bondi_torque_blend` rate, converted to Msol/yr |
+| `torque2:N`    | `torque2_N_Msolyr`        | Column 24 (`dMtorque2`) of `sink_XXXXX.csv`, `bondi_torque_twoch` cold-gas torque channel, converted to Msol/yr |
+| `bondi2:N`     | `bondi2_N_Msolyr`         | Column 25 (`dMbondi2`) of `sink_XXXXX.csv`, `bondi_torque_twoch` hot-gas Bondi channel, converted to Msol/yr |
+| `torquerot:N`  | `torquerot_N_Msolyr`      | Column 26 (`dMtorque_rot`) of `sink_XXXXX.csv`, rotation-only torque diagnostic (not applied to the accretion rate), converted to Msol/yr |
+| `bondinorot:N` | `bondinorot_N_Msolyr`     | Column 27 (`dMbondi_norot`) of `sink_XXXXX.csv`, non-rotating Bondi diagnostic (not applied to the accretion rate), converted to Msol/yr |
+| `starcloud:N`  | `starcloud_N_Msol`        | Column 28 (`M_star_cloud`) of `sink_XXXXX.csv`, star particle mass in the accretion-zone aperture, converted to Msol |
+| `stardisc:N`   | `stardisc_N_Msol`         | Column 29 (`M_star_disc_rot`) of `sink_XXXXX.csv`, rotationally-supported star particle mass, converted to Msol |
+| `torquestar:N` | `torquestar_N_Msolyr`     | Column 30 (`dMtorque_star`) of `sink_XXXXX.csv`, AA17 torque rate using physical star-particle masses, converted to Msol/yr |
 
-Sink-derived fields (`sinkmass`, `smbhmass`, `accrate`, `rho`) use the same code-unit conversion as [`sinkmass`](#sesh-sinkmass-sim_dir-id), reading `unit_l`, `unit_d`, and (for `accrate`) `unit_t` from `info_XXXXX.txt`:
+Sink-derived fields (`sinkmass`, `smbhmass`, `accrate`, `rho`, `ffcold`, `ffhot`, `torque`, `torque2`, `bondi2`, `torquerot`, `bondinorot`, `starcloud`, `stardisc`, `torquestar`) use the same code-unit conversion as [`sinkmass`](#sesh-sinkmass-sim_dir-id), reading `unit_l`, `unit_d`, and (for the `_Msolyr` rate fields) `unit_t` from `info_XXXXX.txt`:
 
 ```
 Msol      = code_mass  * unit_d * unit_l^3 / 1.9885e33
@@ -306,6 +317,7 @@ sesh report /path/to/sim --fields z,t,mgas:1,accrate:1 --source movie --out mgas
 | `cosmo`        | `z,t,lookback`                                   | Cosmological time axis                     |
 | `z_bh:N`       | `z,sinkmass:N,smbhmass:N`                        | BH mass vs. SMBH sub-component for sink `N` |
 | `sink_evol:N`  | `z,t,sinkmass:N,accrate:N`                       | Mass and accretion-rate growth history for sink `N` |
+| `torque_evol:N`| `z,t,torque2:N,bondi2:N,starcloud:N,stardisc:N`  | Torque/Bondi channel split and disc star mass for sink `N` (`bondi_torque_twoch`) |
 
 ```bash
 sesh report /path/to/sim --preset sink_evol:3 --out sink3_history.csv

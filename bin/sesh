@@ -21,8 +21,11 @@ Subcommands:
   sinkmass <sim_dir> <id> [--snap N]  msink and msmbh in solar masses for a sink ID (latest or snapshot N)
   walltime <sim_dir> [--to-z Z]   Cumulative wall time and CPU-Kh per output up to redshift Z
   report <sim_dir> [options]      Write per-snapshot CSV table (numpy-loadable)
-    --fields f1,f2,...            Fields: z, t, lookback, nstars, sinkmass:N, smbhmass:N, accrate:N, rho:N, mgas:N
-    --preset z_stars|cosmo|z_bh:N|sink_evol:N  Named field combination
+    --fields f1,f2,...            Fields: z, t, lookback, nstars, sinkmass:N, smbhmass:N,
+                                   accrate:N, rho:N, mgas:N, ffcold:N, ffhot:N, eddrat:N,
+                                   torque:N, torque2:N, bondi2:N, torquerot:N, bondinorot:N,
+                                   starcloud:N, stardisc:N, torquestar:N
+    --preset z_stars|cosmo|z_bh:N|sink_evol:N|torque_evol:N  Named field combination
     --out <file>                  Output file (default: sesh_report.csv)
     --from N                      Skip outputs before output_N
     --source output|movie|both    Sink data from output_*/ (default), movie1/ frames, or both
@@ -374,7 +377,12 @@ cmd_report() {
         [[ "$sink_preset" =~ ^[0-9]+$ ]] || die "report: sink_evol preset requires numeric id"
         fields="z,t,sinkmass:${sink_preset},accrate:${sink_preset}"
         ;;
-      *) die "report: unknown preset '$preset' (known: z_stars, cosmo, z_bh:<id>, sink_evol:<id>)" ;;
+      torque_evol:*)
+        local torque_preset="${preset#torque_evol:}"
+        [[ "$torque_preset" =~ ^[0-9]+$ ]] || die "report: torque_evol preset requires numeric id"
+        fields="z,t,torque2:${torque_preset},bondi2:${torque_preset},starcloud:${torque_preset},stardisc:${torque_preset}"
+        ;;
+      *) die "report: unknown preset '$preset' (known: z_stars, cosmo, z_bh:<id>, sink_evol:<id>, torque_evol:<id>)" ;;
     esac
   fi
 
@@ -404,6 +412,14 @@ cmd_report() {
       ffcold:*)   header+=",ffcold_${f#ffcold:}_Msolyr" ;;
       ffhot:*)    header+=",ffhot_${f#ffhot:}_Msolyr" ;;
       eddrat:*)   header+=",eddrat_${f#eddrat:}" ;;
+      torque:*)      header+=",torque_${f#torque:}_Msolyr" ;;
+      torque2:*)     header+=",torque2_${f#torque2:}_Msolyr" ;;
+      bondi2:*)      header+=",bondi2_${f#bondi2:}_Msolyr" ;;
+      torquerot:*)   header+=",torquerot_${f#torquerot:}_Msolyr" ;;
+      bondinorot:*)  header+=",bondinorot_${f#bondinorot:}_Msolyr" ;;
+      starcloud:*)   header+=",starcloud_${f#starcloud:}_Msol" ;;
+      stardisc:*)    header+=",stardisc_${f#stardisc:}_Msol" ;;
+      torquestar:*)  header+=",torquestar_${f#torquestar:}_Msolyr" ;;
       *) die "report: unknown field '$f'" ;;
     esac
   done
@@ -655,6 +671,133 @@ cmd_report() {
                   else print "nan"
                   found=1; exit
                 }
+                END { if (!found) print "nan" }
+              ' "$csvfile")
+            else
+              val="nan"
+            fi
+            ;;
+          torque:*)
+            # dMtorque (col 23): hybrid torque/Bondi rate (bondi_torque_blend)
+            bh_id="${f#torque:}"
+            unit_l=$(get_param unit_l "$infofile")
+            unit_d=$(get_param unit_d "$infofile")
+            unit_t=$(get_param unit_t "$infofile")
+            if [[ -f "$csvfile" && -n "$unit_l" && -n "$unit_d" && -n "$unit_t" ]]; then
+              val=$(awk -F',' -v id="$bh_id" -v ul="$unit_l" -v ud="$unit_d" -v ut="$unit_t" '
+                /^#/ { next }
+                $1+0==id+0 { printf "%.4e", ($23+0)*ud*ul^3/ut*3.15576e7/1.9885e33; found=1; exit }
+                END { if (!found) print "nan" }
+              ' "$csvfile")
+            else
+              val="nan"
+            fi
+            ;;
+          torque2:*)
+            # dMtorque2 (col 24): cold-gas torque channel of bondi_torque_twoch
+            bh_id="${f#torque2:}"
+            unit_l=$(get_param unit_l "$infofile")
+            unit_d=$(get_param unit_d "$infofile")
+            unit_t=$(get_param unit_t "$infofile")
+            if [[ -f "$csvfile" && -n "$unit_l" && -n "$unit_d" && -n "$unit_t" ]]; then
+              val=$(awk -F',' -v id="$bh_id" -v ul="$unit_l" -v ud="$unit_d" -v ut="$unit_t" '
+                /^#/ { next }
+                $1+0==id+0 { printf "%.4e", ($24+0)*ud*ul^3/ut*3.15576e7/1.9885e33; found=1; exit }
+                END { if (!found) print "nan" }
+              ' "$csvfile")
+            else
+              val="nan"
+            fi
+            ;;
+          bondi2:*)
+            # dMbondi2 (col 25): hot-gas Bondi channel of bondi_torque_twoch
+            bh_id="${f#bondi2:}"
+            unit_l=$(get_param unit_l "$infofile")
+            unit_d=$(get_param unit_d "$infofile")
+            unit_t=$(get_param unit_t "$infofile")
+            if [[ -f "$csvfile" && -n "$unit_l" && -n "$unit_d" && -n "$unit_t" ]]; then
+              val=$(awk -F',' -v id="$bh_id" -v ul="$unit_l" -v ud="$unit_d" -v ut="$unit_t" '
+                /^#/ { next }
+                $1+0==id+0 { printf "%.4e", ($25+0)*ud*ul^3/ut*3.15576e7/1.9885e33; found=1; exit }
+                END { if (!found) print "nan" }
+              ' "$csvfile")
+            else
+              val="nan"
+            fi
+            ;;
+          torquerot:*)
+            # dMtorque_rot (col 26): rotation-only torque diagnostic, not applied to dMsink_overdt
+            bh_id="${f#torquerot:}"
+            unit_l=$(get_param unit_l "$infofile")
+            unit_d=$(get_param unit_d "$infofile")
+            unit_t=$(get_param unit_t "$infofile")
+            if [[ -f "$csvfile" && -n "$unit_l" && -n "$unit_d" && -n "$unit_t" ]]; then
+              val=$(awk -F',' -v id="$bh_id" -v ul="$unit_l" -v ud="$unit_d" -v ut="$unit_t" '
+                /^#/ { next }
+                $1+0==id+0 { printf "%.4e", ($26+0)*ud*ul^3/ut*3.15576e7/1.9885e33; found=1; exit }
+                END { if (!found) print "nan" }
+              ' "$csvfile")
+            else
+              val="nan"
+            fi
+            ;;
+          bondinorot:*)
+            # dMbondi_norot (col 27): non-rotating Bondi diagnostic, not applied to dMsink_overdt
+            bh_id="${f#bondinorot:}"
+            unit_l=$(get_param unit_l "$infofile")
+            unit_d=$(get_param unit_d "$infofile")
+            unit_t=$(get_param unit_t "$infofile")
+            if [[ -f "$csvfile" && -n "$unit_l" && -n "$unit_d" && -n "$unit_t" ]]; then
+              val=$(awk -F',' -v id="$bh_id" -v ul="$unit_l" -v ud="$unit_d" -v ut="$unit_t" '
+                /^#/ { next }
+                $1+0==id+0 { printf "%.4e", ($27+0)*ud*ul^3/ut*3.15576e7/1.9885e33; found=1; exit }
+                END { if (!found) print "nan" }
+              ' "$csvfile")
+            else
+              val="nan"
+            fi
+            ;;
+          starcloud:*)
+            # M_star_cloud (col 28): total star particle mass in the accretion-zone aperture
+            bh_id="${f#starcloud:}"
+            unit_l=$(get_param unit_l "$infofile")
+            unit_d=$(get_param unit_d "$infofile")
+            if [[ -f "$csvfile" && -n "$unit_l" && -n "$unit_d" ]]; then
+              val=$(awk -F',' -v id="$bh_id" -v ul="$unit_l" -v ud="$unit_d" '
+                /^#/ { next }
+                $1+0==id+0 { printf "%.4e", ($28+0)*ud*ul^3/1.9885e33; found=1; exit }
+                END { if (!found) print "nan" }
+              ' "$csvfile")
+            else
+              val="nan"
+            fi
+            ;;
+          stardisc:*)
+            # M_star_disc_rot (col 29): rotationally-supported star particle mass (the disc term
+            # used in f_d_torque when use_stellar_mass_torque is on)
+            bh_id="${f#stardisc:}"
+            unit_l=$(get_param unit_l "$infofile")
+            unit_d=$(get_param unit_d "$infofile")
+            if [[ -f "$csvfile" && -n "$unit_l" && -n "$unit_d" ]]; then
+              val=$(awk -F',' -v id="$bh_id" -v ul="$unit_l" -v ud="$unit_d" '
+                /^#/ { next }
+                $1+0==id+0 { printf "%.4e", ($29+0)*ud*ul^3/1.9885e33; found=1; exit }
+                END { if (!found) print "nan" }
+              ' "$csvfile")
+            else
+              val="nan"
+            fi
+            ;;
+          torquestar:*)
+            # dMtorque_star (col 30): AA17 torque rate using physical star-particle masses
+            bh_id="${f#torquestar:}"
+            unit_l=$(get_param unit_l "$infofile")
+            unit_d=$(get_param unit_d "$infofile")
+            unit_t=$(get_param unit_t "$infofile")
+            if [[ -f "$csvfile" && -n "$unit_l" && -n "$unit_d" && -n "$unit_t" ]]; then
+              val=$(awk -F',' -v id="$bh_id" -v ul="$unit_l" -v ud="$unit_d" -v ut="$unit_t" '
+                /^#/ { next }
+                $1+0==id+0 { printf "%.4e", ($30+0)*ud*ul^3/ut*3.15576e7/1.9885e33; found=1; exit }
                 END { if (!found) print "nan" }
               ' "$csvfile")
             else
