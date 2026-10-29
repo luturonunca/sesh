@@ -264,9 +264,11 @@ sesh report /path/to/sim --preset sink_evol:1 --source both --out sink1_fine.csv
 |----------------|---------------------------|------------------------------------------------------|
 | `z`            | `z`                       | `aexp` in `info_XXXXX.txt`                           |
 | `t`            | `t_Gyr`                   | Cosmological age (Friedmann integration)             |
+| `time`         | `time_Myr`                | Code time (`time` in `info_XXXXX.txt`) × `unit_t`; use for non-cosmological runs |
 | `lookback`     | `lookback_Gyr`            | Lookback time                                        |
 | `nstars`       | `nstars`                  | Line count of `stars_*.out*`                         |
 | `sinkmass:N`   | `msink_N_Msol`            | Column 2 (`msink`) of `sink_XXXXX.csv` for sink id `N` |
+| `pos:N`        | `x_N_kpc,y_N_kpc,z_N_kpc` | Columns 3-5 (`x,y,z`) of `sink_XXXXX.csv` × `unit_l`, in kpc (three columns) |
 | `smbhmass:N`   | `msmbh_N_Msol`            | Column 21 (`mbh`) of `sink_XXXXX.csv` for sink id `N`  |
 | `accrate:N`    | `accrate_N_Msolyr`        | Column 13 (`acc_rate`) of `sink_XXXXX.csv` for sink id `N`, converted to Msol/yr |
 | `rho:N`        | `rho_N_gcm3`              | Column 15 (`rho_gas`) of `sink_XXXXX.csv` for sink id `N`, converted to g/cm³ |

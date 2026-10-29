@@ -21,7 +21,7 @@ Subcommands:
   sinkmass <sim_dir> <id> [--snap N]  msink and msmbh in solar masses for a sink ID (latest or snapshot N)
   walltime <sim_dir> [--to-z Z]   Cumulative wall time and CPU-Kh per output up to redshift Z
   report <sim_dir> [options]      Write per-snapshot CSV table (numpy-loadable)
-    --fields f1,f2,...            Fields: z, t, lookback, nstars, sinkmass:N, smbhmass:N,
+    --fields f1,f2,...            Fields: z, t, time, lookback, nstars, sinkmass:N, smbhmass:N, pos:N,
                                    accrate:N, rho:N, mgas:N, ffcold:N, ffhot:N, eddrat:N,
                                    torque:N, torque2:N, bondi2:N, torquerot:N, bondinorot:N,
                                    starcloud:N, stardisc:N, torquestar:N
@@ -402,10 +402,12 @@ cmd_report() {
     case "$f" in
       z)          header+=",z" ;;
       t)          header+=",t_Gyr" ;;
+      time)       header+=",time_Myr" ;;
       lookback)   header+=",lookback_Gyr" ;;
       nstars)     header+=",nstars" ;;
       sinkmass:*) header+=",msink_${f#sinkmass:}_Msol" ;;
       smbhmass:*) header+=",msmbh_${f#smbhmass:}_Msol" ;;
+      pos:*)      header+=",x_${f#pos:}_kpc,y_${f#pos:}_kpc,z_${f#pos:}_kpc" ;;
       accrate:*)  header+=",accrate_${f#accrate:}_Msolyr" ;;
       rho:*)      header+=",rho_${f#rho:}_gcm3" ;;
       mgas:*)     header+=",mgas_${f#mgas:}_Msol" ;;
@@ -524,6 +526,10 @@ cmd_report() {
                 printf "%.4f", (2/(3*sqrt(Ol)))*asinh(sqrt(Ol/Om)*a^(3/2))*tH
               }' "$infofile") || val="nan"
             ;;
+          time)
+            unit_t=$(get_param unit_t "$infofile")
+            val=$(awk -v ut="$unit_t" '/^time/ { printf "%.4f", ($3+0)*ut/3.15576e13; found=1 } END { if (!found||ut=="") exit 1 }' "$infofile") || val="nan"
+            ;;
           lookback)
             val=$(awk '
               function asinh(x) { return log(x + sqrt(x*x + 1.0)) }
@@ -572,6 +578,19 @@ cmd_report() {
               ' "$csvfile")
             else
               val="nan"
+            fi
+            ;;
+          pos:*)
+            bh_id="${f#pos:}"
+            unit_l=$(get_param unit_l "$infofile")
+            if [[ -f "$csvfile" && -n "$unit_l" ]]; then
+              val=$(awk -F',' -v id="$bh_id" -v ul="$unit_l" '
+                /^#/ { next }
+                $1+0==id+0 { printf "%.6e,%.6e,%.6e", ($3+0)*ul/3.085677581e21, ($4+0)*ul/3.085677581e21, ($5+0)*ul/3.085677581e21; found=1; exit }
+                END { if (!found) print "nan,nan,nan" }
+              ' "$csvfile")
+            else
+              val="nan,nan,nan"
             fi
             ;;
           accrate:*)
