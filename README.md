@@ -118,6 +118,21 @@ This is **not** simply `nsink_curr - nsink_prev`: RAMSES sinks can merge (`clean
 
 ---
 
+### `sesh cbcevents <outputs_root> [--from N]`
+
+Merge the per-CPU cluster-based SF diagnostic logs (`cbc_events_*.out*`, written by RAMSES-yOMP with `sf_log_properties` and `sf_cluster_sampling`) into a single CSV on stdout, one row per SF event, prefixed with the output number and its redshift.
+
+Columns: `output, z, ilevel, n_orig, M_sf_msun, Mcl_char_msun, sigma_lnM, M_sf_over_Mcl, nH_cgs, Rchar_pc, dxloc_pc, n_cl`. For the power-law kernel `Mcl_char_msun` is the Jeans mass; `n_cl` is the number of clusters the event was split into.
+
+The log in `output_N` holds the events between output N and N+1. Outputs without `cbc_events` files are skipped; truncated lines are dropped.
+
+```bash
+sesh cbcevents /path/to/sim > cbc_events.csv
+sesh cbcevents /path/to/sim --from 12 > cbc_events.csv
+```
+
+---
+
 ### `sesh simstatus [--path DIR]`
 
 Print a one-line summary per simulation showing the latest snapshot, redshift, and how recently the output was written.
