@@ -141,8 +141,8 @@ Columns: `output, z, id, ilevel, mp_msun, x, y, z_pos, nH_cgs, T2_K, Z, Mj_msun,
 
 - `x, y, z_pos`: code units.
 - `mp_msun`: mass of the first particle of the episode, not the episode mass.
-- `T2_K`: T/mu, with the kinetic energy removed from the logged total energy.
-- `Z`: metal mass fraction, `u_imetal / rho`. `--imetal` defaults to 6 (`ndim+3`).
+- `T2_K`: T/mu [K]. SF rows are written while the cell holds primitive variables, so it is read directly.
+- `Z`: metal mass fraction, `u_imetal` (primitive). `--imetal` defaults to 6 (`ndim+3`).
 
 Units come from the `info_*.txt` of the same output. The log in `output_N` holds the events between outputs N and N+1, so in cosmological runs physical densities can be off by up to `(a_{N+1}/a_N)^3`.
 
