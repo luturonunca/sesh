@@ -133,6 +133,26 @@ sesh cbcevents /path/to/sim --from 12 > cbc_events.csv
 
 ---
 
+### `sesh sfevents <outputs_root> [--from N] [--imetal K]`
+
+One row per cluster-based SF episode, read from the `event 0` rows of `stars_*.out*` that RAMSES-yOMP writes with `sf_log_properties` and `sf_cluster_sampling` (`pm/star_formation.f90`). Legacy SF rows, without the CbC columns, and SN rows are skipped.
+
+Columns: `output, z, id, ilevel, mp_msun, x, y, z_pos, nH_cgs, T2_K, Z, Mj_msun, alpha_vir, imf_s, eta_sn`.
+
+- `x, y, z_pos`: code units.
+- `mp_msun`: mass of the first particle of the episode, not the episode mass.
+- `T2_K`: T/mu, with the kinetic energy removed from the logged total energy.
+- `Z`: metal mass fraction, `u_imetal / rho`. `--imetal` defaults to 6 (`ndim+3`).
+
+Units come from the `info_*.txt` of the same output. The log in `output_N` holds the events between outputs N and N+1, so in cosmological runs physical densities can be off by up to `(a_{N+1}/a_N)^3`.
+
+```bash
+sesh sfevents /path/to/sim > sf_events.csv
+sesh sfevents /path/to/sim --from 12 --imetal 6 > sf_events.csv
+```
+
+---
+
 ### `sesh simstatus [--path DIR]`
 
 Print a one-line summary per simulation showing the latest snapshot, redshift, and how recently the output was written.

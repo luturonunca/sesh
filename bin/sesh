@@ -18,6 +18,7 @@ Subcommands:
   time <output_dir>               Redshift, age, and lookback time (or 'all')
   eventstats <root> [--from N]    Count SF/SN/B-SF/B-SN2/B-MRG events (stars_*.out*) and sink births (sink_*.csv) per snapshot
   cbcevents <root> [--from N]     CSV of CbC star formation events (cbc_events_*.out*) from all outputs, to stdout
+  sfevents <root> [--from N] [--imetal K]  CSV of CbC SF episodes from stars_*.out* (nH, T, Z, Mj, alpha_vir, imf_s, eta_sn), to stdout
   simstatus [--path DIR]          One-line status per simulation: latest snapshot, z, last write time
   sinkmass <sim_dir> <id> [--snap N]  msink and msmbh in solar masses for a sink ID (latest or snapshot N)
   walltime <sim_dir> [--to-z Z]   Cumulative wall time and CPU-Kh per output up to redshift Z
@@ -297,6 +298,58 @@ cmd_cbcevents() {
     awk -v nchar="$nchar" -v z="$z" '
       /^#/ { next }
       NF == 10 { printf "%d,%s", nchar+0, z+0; for (i = 1; i <= NF; i++) printf ",%s", $i; printf "\n" }
+    ' "${files[@]}"
+  done
+}
+
+# One row per CbC SF episode from stars_*.out* (event 0 rows written in
+# star_formation.f90 with sf_log_properties + sf_cluster_sampling). Row layout:
+# event id ilevel mp xp1-3 vp1-3 u1..u_nvar tag Mj alpha_vir imf_s eta_sn,
+# where u are the cell's conservative variables except u_{ndim+2}, written as
+# (gamma-1)*E*scale_T2. Legacy SF rows (no alpha_vir/imf_s/eta_sn) are skipped.
+# Units come from the info file of the same output; the log in output_N holds
+# events between outputs N and N+1, so physical densities are off by up to
+# (a_{N+1}/a_N)^3 in cosmological runs.
+cmd_sfevents() {
+  local root="$1"
+  local start="${2:-}"
+  local imetal="${3:-6}"
+  [[ -d "$root" ]] || die "not a directory: $root"
+  if [[ -n "$start" ]]; then
+    [[ "$start" =~ ^[0-9]+$ ]] || die "start must be an integer: $start"
+  fi
+  [[ "$imetal" =~ ^[0-9]+$ ]] || die "imetal must be an integer: $imetal"
+  local -a outputs files
+  shopt -s nullglob
+  outputs=("$root"/output_*)
+  shopt -u nullglob
+  (( ${#outputs[@]} )) || die "no output_* directories found in $root"
+
+  echo "output,z,id,ilevel,mp_msun,x,y,z_pos,nH_cgs,T2_K,Z,Mj_msun,alpha_vir,imf_s,eta_sn"
+  local outdir outname nchar z info ul ud ut
+  for outdir in "${outputs[@]}"; do
+    [[ -d "$outdir" ]] || continue
+    outname=$(basename -- "$outdir")
+    nchar="${outname#output_}"
+    if [[ -n "$start" ]]; then
+      (( 10#$nchar < 10#$start )) && continue
+    fi
+    shopt -s nullglob
+    files=("$outdir"/stars_*.out*)
+    shopt -u nullglob
+    (( ${#files[@]} )) || continue
+    z=$(cmd_z "$outdir") || die "failed z for $outdir"
+    info=$(find_info_file "$outdir")
+    ul=$(get_param unit_l "$info"); ud=$(get_param unit_d "$info"); ut=$(get_param unit_t "$info")
+    awk -v nchar="$nchar" -v z="$z" -v ul="$ul" -v ud="$ud" -v ut="$ut" -v im="$imetal" '
+      BEGIN { mH = 1.6605390e-24; kB = 1.3806490e-16; XH = 0.76; gm1 = 2.0/3.0
+              sT2 = mH/kB*(ul/ut)^2; snH = XH/mH*ud; sM = ud*ul^3/1.98892e33 }
+      /^#/ { nv = 0; for (i = 1; i <= NF; i++) if ($i ~ /^u[0-9]+$/) nv++; next }
+      nv > 0 && $1 == 0 && NF == 10 + nv + 5 {
+        r = $11; ek = 0.5*($12^2 + $13^2 + $14^2)/r
+        printf "%d,%s,%d,%d,%.6e,%s,%s,%s,%.6e,%.6e,%.6e,%s,%s,%s,%s\n", nchar+0, z+0, $2, $3, $4*sM, $5, $6, $7, \
+          r*snH, ($15 - gm1*sT2*ek)/r, $(10+im)/r, $(NF-3), $(NF-2), $(NF-1), $NF
+      }
     ' "${files[@]}"
   done
 }
@@ -1018,6 +1071,18 @@ main() {
         die "usage: sesh cbcevents <outputs_root> [--from N]"
       fi
       cmd_cbcevents "$outdir" "$start"
+      ;;
+    sfevents)
+      local start="" imetal="6"
+      shift 2 || die "usage: sesh sfevents <outputs_root> [--from N] [--imetal K]"
+      while (( $# )); do
+        case "$1" in
+          --from)   start="${2:-}"; shift 2 ;;
+          --imetal) imetal="${2:-}"; shift 2 ;;
+          *) die "usage: sesh sfevents <outputs_root> [--from N] [--imetal K]" ;;
+        esac
+      done
+      cmd_sfevents "$outdir" "$start" "$imetal"
       ;;
     simstatus)
       local root="."
